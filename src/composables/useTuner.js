@@ -1,5 +1,6 @@
-import { ref, shallowRef, computed, toValue, onScopeDispose, getCurrentScope } from 'vue'
+import { ref, shallowRef, computed, toValue, watch, onScopeDispose, getCurrentScope } from 'vue'
 import { guitar } from '@/stores/useGuitar'
+
 /* -------------------------------------------------------------------------- */
 /*  Pure DSP / music helpers                                                  */
 /* -------------------------------------------------------------------------- */
@@ -104,6 +105,8 @@ const nextPow2 = (n) => 2 ** Math.ceil(Math.log2(n))
  * @param {number}  [options.holdMs=600]         keep last reading this long after signal is lost
  * @param {number}  [options.inTuneCents=5]      tolerance for "in tune"
  * @param {number}  [options.minFreq] [options.maxFreq]  override detection range
+ * @param {number}  [options.inputGain=1]        software gain before detection (ref/getter ok, live)
+ * @param {boolean} [options.autoGainControl=false] browser AGC (ref/getter ok, restarts the mic)
  * @param {string}  [options.deviceId]           choose a specific microphone
  * @param {Function}[options.onUpdate]           called with each reading
  */
@@ -118,6 +121,8 @@ export function useTuner(options = {}) {
     updateInterval = 50,
     holdMs = 600,
     inTuneCents = 5,
+    inputGain = 1,
+    autoGainControl = false,
     deviceId,
     onUpdate,
   } = options
@@ -129,13 +134,16 @@ export function useTuner(options = {}) {
   // state
   const isListening = ref(false)
   const error = ref(null)
-  const level = ref(0) // RMS of the input, handy for a level meter
+  const level = ref(0) // RMS of the input AFTER gain, handy for a level meter
+  const sinceDetection = ref(0) // ms since the last valid pitch (or since start)
   const reading = shallowRef(null)
 
   // internals
   let ctx = null
   let stream = null
   let analyser = null
+  let gainNode = null
+  let startedAt = 0
   let buf = null
   let rafId = 0
   let lastRun = 0
@@ -173,7 +181,7 @@ export function useTuner(options = {}) {
           deviceId: deviceId ? { exact: deviceId } : undefined,
           echoCancellation: false,
           noiseSuppression: false,
-          autoGainControl: false,
+          autoGainControl: !!toValue(autoGainControl),
         },
       })
 
@@ -192,10 +200,14 @@ export function useTuner(options = {}) {
       buf = new Float32Array(analyser.fftSize)
 
       // NOT connected to ctx.destination -> no feedback
-      ctx.createMediaStreamSource(stream).connect(analyser)
+      gainNode = ctx.createGain()
+      gainNode.gain.value = Number(toValue(inputGain)) || 1
+      ctx.createMediaStreamSource(stream).connect(gainNode).connect(analyser)
 
       history = []
       lastRun = 0
+      lastSignal = 0
+      startedAt = performance.now()
       isListening.value = true
       rafId = requestAnimationFrame(tick)
     } catch (e) {
@@ -213,7 +225,8 @@ export function useTuner(options = {}) {
     cancelAnimationFrame(rafId)
     stream?.getTracks().forEach((t) => t.stop())
     if (ctx && ctx.state !== 'closed') await ctx.close()
-    ctx = stream = analyser = buf = null
+    ctx = stream = analyser = gainNode = buf = null
+    sinceDetection.value = 0
     history = []
     reading.value = null
     level.value = 0
@@ -221,6 +234,20 @@ export function useTuner(options = {}) {
   }
 
   const toggle = () => (isListening.value ? stop() : start())
+
+  async function restart() {
+    if (!isListening.value) return
+    await stop()
+    await start()
+  }
+
+  // live gain changes, no restart needed
+  watch(
+    () => Number(toValue(inputGain)) || 1,
+    (g) => gainNode && ctx && gainNode.gain.setTargetAtTime(g, ctx.currentTime, 0.02),
+  )
+  // AGC is a getUserMedia constraint: the stream must be reopened
+  watch(() => !!toValue(autoGainControl), restart)
 
   /* ------------------------------ main loop ------------------------------ */
 
@@ -235,6 +262,7 @@ export function useTuner(options = {}) {
     for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
     const rms = Math.sqrt(sum / buf.length)
     level.value = rms
+    sinceDetection.value = now - Math.max(lastSignal, startedAt)
 
     if (rms < toValue(minRms)) return signalLost(now)
 
@@ -303,6 +331,7 @@ export function useTuner(options = {}) {
     isListening,
     error,
     level,
+    sinceDetection,
     reading,
     frequency,
     cents,
@@ -316,6 +345,7 @@ export function useTuner(options = {}) {
     start,
     stop,
     toggle,
+    restart,
     selectString,
   }
 }
