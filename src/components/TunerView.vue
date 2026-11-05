@@ -967,6 +967,8 @@ label:focus-within {
   border-top: 1.5px solid var(--blue-100);
   padding-bottom: env(safe-area-inset-bottom);
   background: #fff;
+  padding: 32px 0;
+  margin-bottom: 16px;
 }
 .nav button {
   position: relative;
