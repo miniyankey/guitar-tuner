@@ -133,7 +133,8 @@ export function useTuner(options = {}) {
 
   // state
   const isListening = ref(false)
-  const error = ref(null)
+  const error = ref(null) // English message (logs)
+  const errorCode = ref(null) // "permission" | "notFound" | "unknown", for translated UI
   const level = ref(0) // RMS of the input AFTER gain, handy for a level meter
   const sinceDetection = ref(0) // ms since the last valid pitch (or since start)
   const reading = shallowRef(null)
@@ -174,6 +175,7 @@ export function useTuner(options = {}) {
   async function start() {
     if (isListening.value) return
     error.value = null
+    errorCode.value = null
 
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -211,6 +213,12 @@ export function useTuner(options = {}) {
       isListening.value = true
       rafId = requestAnimationFrame(tick)
     } catch (e) {
+      errorCode.value =
+        e?.name === 'NotAllowedError' || e?.name === 'SecurityError'
+          ? 'permission'
+          : e?.name === 'NotFoundError' || e?.name === 'OverconstrainedError'
+            ? 'notFound'
+            : 'unknown'
       error.value =
         e?.name === 'NotAllowedError'
           ? 'Microphone permission denied.'
@@ -330,6 +338,7 @@ export function useTuner(options = {}) {
     // state
     isListening,
     error,
+    errorCode,
     level,
     sinceDetection,
     reading,

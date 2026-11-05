@@ -19,22 +19,23 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'invalid'])
 
 const fmt = (n) =>
-  props.format ? props.format(n) : String(Math.round(n * 100) / 100).replace('.', ',')
+  props.format ? props.format(n) : n.toLocaleString(undefined, { maximumFractionDigits: 2 })
 const parseFn = (s) => {
   if (props.parse) return props.parse(s)
   const n = Number(s.replace(/\s/g, '').replace(',', '.'))
-  if (!Number.isFinite(n)) throw new Error('Valeur invalide.')
+  if (!Number.isFinite(n)) throw new Error('')
   return n
 }
 
 const draft = ref(fmt(props.modelValue))
 const focused = ref(false)
 
-// La valeur du store ne remplace le brouillon que si le champ n'est pas en cours d'édition.
+// La valeur affichée (valeur + langue) ne remplace le brouillon que hors édition.
+// Le getter appelle `fmt`, donc un changement de langue est suivi lui aussi.
 watch(
-  () => props.modelValue,
-  (v) => {
-    if (!focused.value) draft.value = fmt(v)
+  () => fmt(props.modelValue),
+  (text) => {
+    if (!focused.value) draft.value = text
   },
 )
 
@@ -47,10 +48,10 @@ function commit() {
   focused.value = false
   try {
     const n = parseFn(draft.value.trim())
-    if (!Number.isFinite(n)) throw new Error('Valeur invalide.')
+    if (!Number.isFinite(n)) throw new Error('')
     if (fmt(n) !== fmt(props.modelValue)) emit('update:modelValue', n)
   } catch (e) {
-    emit('invalid', e.message)
+    emit('invalid', e?.message ?? '') // message vide = le parent affiche son texte par défaut
   }
   // Remet la valeur officielle (arrondie, ou ancienne valeur si la saisie était refusée)
   nextTick(() => (draft.value = fmt(props.modelValue)))

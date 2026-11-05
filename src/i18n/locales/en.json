@@ -1,0 +1,122 @@
+{
+  "tabs": {
+    "tuner": "Tune",
+    "tuning": "Tuning",
+    "settings": "Settings"
+  },
+  "pages": {
+    "strings": "Strings one by one",
+    "pitch": "Reference pitch",
+    "custom": "Custom tuning",
+    "detection": "Advanced detection",
+    "language": "Language"
+  },
+  "common": {
+    "back": "Back",
+    "reset": "Reset",
+    "apply": "Apply",
+    "navigation": "Navigation",
+    "listening": "Listening"
+  },
+  "tuner": {
+    "region": "Tuner",
+    "custom": "Custom",
+    "chromatic": "Chromatic",
+    "target": "target {hz} Hz",
+    "meter": "Distance from the target note, in cents",
+    "tooLow": "Too low",
+    "tooHigh": "Too high",
+    "cents": "{value} cents",
+    "stringPicker": "String to tune",
+    "auto": "Auto",
+    "lowSignal": "Signal too weak. Move the mic closer.",
+    "moreSensitivity": "Sensitivity +",
+    "start": "Start",
+    "stop": "Stop",
+    "hint": {
+      "idle": "Press Start",
+      "waiting": "Play a string",
+      "waitingString": "Play {note}",
+      "flat": "Too low, tighten the string",
+      "sharp": "Too high, loosen the string",
+      "inTune": "In tune"
+    }
+  },
+  "tuning": {
+    "editStrings": "Edit strings",
+    "instrument": "Instrument",
+    "tuning": "Tuning",
+    "shift": "Pitch shift",
+    "shiftField": "Pitch shift, in tones",
+    "shiftDown": "Lower by an eighth of a tone",
+    "shiftUp": "Raise by an eighth of a tone",
+    "advanced": "Advanced",
+    "modified": "{n} modified",
+    "reset": "Reset tuning"
+  },
+  "strings": {
+    "base": "base",
+    "fixedHz": "fixed Hz",
+    "noteChanged": "note changed",
+    "noteOf": "Note of string {n}",
+    "octaveOf": "Octave of string {n}",
+    "freqOf": "Frequency of string {n}",
+    "help": "Changing the base string frequency shifts all the others.",
+    "resetAll": "Reset all strings"
+  },
+  "pitch": {
+    "a4": "A4",
+    "a4Value": "A4 = {hz} Hz",
+    "a4Field": "A4 frequency",
+    "common": "Common A4 values",
+    "baseString": "Base string ({note})",
+    "baseField": "Base string frequency",
+    "equivalent": "Same as a pitch shift of {shift}."
+  },
+  "custom": {
+    "label": "Notes, from lowest to highest",
+    "placeholder": "DADGBE or D2 A2 D3 G3 B3 E4"
+  },
+  "settings": {
+    "mic": "Microphone",
+    "sensitivity": "Sensitivity",
+    "meterHelp": "Play a string: the bar should pass the marker.",
+    "test": "Test the microphone",
+    "chromatic": "Chromatic tuner",
+    "smoothing": "Smoothing",
+    "tolerance": "“In tune” tolerance",
+    "toleranceValue": "±{n} cents",
+    "autoGain": "Automatic gain",
+    "resetDetection": "Reset detection",
+    "language": "Language"
+  },
+  "units": {
+    "tone": "tone | tones"
+  },
+  "instrument": {
+    "guitar": "Guitar {n}",
+    "bass": "Bass {n}"
+  },
+  "presets": {
+    "standard": "Standard",
+    "drop": "Drop {note}"
+  },
+  "errors": {
+    "invalidHz": "Enter a frequency in Hz, for example 82.41.",
+    "invalidTones": "Enter a number of tones, for example −1/4 or −0.25.",
+    "divisionByZero": "Division by zero.",
+    "tooLarge": "Value too large (6 tones maximum).",
+    "invalidValue": "Invalid value.",
+    "invalidNote": "“{note}” is not a valid note.",
+    "missingOctave": "Add an octave to “{note}”, for example {note}3.",
+    "unreadableTuning": "Couldn't read the tuning “{tuning}”.",
+    "stringCountMismatch": "This tuning has {count} notes, but the instrument has {expected} strings.",
+    "noDefaultTuning": "No default tuning for {count} strings. Enter one under Custom tuning.",
+    "noString": "String {index} doesn't exist."
+  },
+  "mic": {
+    "permission": "Microphone access was denied. Allow it in your browser settings, then press Start.",
+    "notFound": "No microphone found.",
+    "unknown": "Couldn't start the microphone: {message}"
+  }
+}

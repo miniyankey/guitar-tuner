@@ -1,0 +1,122 @@
+{
+  "tabs": {
+    "tuner": "Afinar",
+    "tuning": "Afinación",
+    "settings": "Ajustes"
+  },
+  "pages": {
+    "strings": "Cuerda por cuerda",
+    "pitch": "Frecuencia de referencia",
+    "custom": "Afinación personalizada",
+    "detection": "Detección avanzada",
+    "language": "Idioma"
+  },
+  "common": {
+    "back": "Atrás",
+    "reset": "Restablecer",
+    "apply": "Aplicar",
+    "navigation": "Navegación",
+    "listening": "Escuchando"
+  },
+  "tuner": {
+    "region": "Afinador",
+    "custom": "Personalizada",
+    "chromatic": "Cromático",
+    "target": "objetivo {hz} Hz",
+    "meter": "Desviación respecto a la nota objetivo, en cents",
+    "tooLow": "Demasiado grave",
+    "tooHigh": "Demasiado agudo",
+    "cents": "{value} cents",
+    "stringPicker": "Cuerda que afinar",
+    "auto": "Auto",
+    "lowSignal": "Señal demasiado débil. Acerca el micrófono.",
+    "moreSensitivity": "Sensibilidad +",
+    "start": "Iniciar",
+    "stop": "Detener",
+    "hint": {
+      "idle": "Pulsa Iniciar",
+      "waiting": "Toca una cuerda",
+      "waitingString": "Toca {note}",
+      "flat": "Demasiado grave, tensa la cuerda",
+      "sharp": "Demasiado agudo, afloja la cuerda",
+      "inTune": "Afinada"
+    }
+  },
+  "tuning": {
+    "editStrings": "Editar cuerdas",
+    "instrument": "Instrumento",
+    "tuning": "Afinación",
+    "shift": "Transposición",
+    "shiftField": "Transposición, en tonos",
+    "shiftDown": "Bajar un octavo de tono",
+    "shiftUp": "Subir un octavo de tono",
+    "advanced": "Avanzado",
+    "modified": "{n} modificada | {n} modificadas",
+    "reset": "Restablecer la afinación"
+  },
+  "strings": {
+    "base": "base",
+    "fixedHz": "Hz fijo",
+    "noteChanged": "nota cambiada",
+    "noteOf": "Nota de la cuerda {n}",
+    "octaveOf": "Octava de la cuerda {n}",
+    "freqOf": "Frecuencia de la cuerda {n}",
+    "help": "Al cambiar la frecuencia de la cuerda base, todas las demás se desplazan.",
+    "resetAll": "Restablecer todas las cuerdas"
+  },
+  "pitch": {
+    "a4": "La4",
+    "a4Value": "La4 = {hz} Hz",
+    "a4Field": "Frecuencia del La4",
+    "common": "Valores habituales del La4",
+    "baseString": "Cuerda base ({note})",
+    "baseField": "Frecuencia de la cuerda base",
+    "equivalent": "Equivale a una transposición de {shift}."
+  },
+  "custom": {
+    "label": "Notas, de la más grave a la más aguda",
+    "placeholder": "DADGBE o D2 A2 D3 G3 B3 E4"
+  },
+  "settings": {
+    "mic": "Micrófono",
+    "sensitivity": "Sensibilidad",
+    "meterHelp": "Toca una cuerda: la barra debe superar la marca.",
+    "test": "Probar el micrófono",
+    "chromatic": "Afinador cromático",
+    "smoothing": "Suavizado",
+    "tolerance": "Tolerancia de «afinada»",
+    "toleranceValue": "±{n} cents",
+    "autoGain": "Ganancia automática",
+    "resetDetection": "Restablecer la detección",
+    "language": "Idioma"
+  },
+  "units": {
+    "tone": "tono | tonos"
+  },
+  "instrument": {
+    "guitar": "Guitarra {n}",
+    "bass": "Bajo {n}"
+  },
+  "presets": {
+    "standard": "Estándar",
+    "drop": "Drop {note}"
+  },
+  "errors": {
+    "invalidHz": "Introduce una frecuencia en Hz, por ejemplo 82,41.",
+    "invalidTones": "Escribe un número de tonos, por ejemplo −1/4 o −0,25.",
+    "divisionByZero": "División por cero.",
+    "tooLarge": "Valor demasiado grande (máximo 6 tonos).",
+    "invalidValue": "Valor no válido.",
+    "invalidNote": "«{note}» no es una nota válida.",
+    "missingOctave": "Añade una octava a «{note}», por ejemplo {note}3.",
+    "unreadableTuning": "No se pudo leer la afinación «{tuning}».",
+    "stringCountMismatch": "Esta afinación tiene {count} notas, pero el instrumento tiene {expected} cuerdas.",
+    "noDefaultTuning": "No hay afinación predeterminada para {count} cuerdas. Escribe una en Afinación personalizada.",
+    "noString": "La cuerda {index} no existe."
+  },
+  "mic": {
+    "permission": "Se denegó el acceso al micrófono. Permítelo en los ajustes del navegador y pulsa Iniciar.",
+    "notFound": "No se encontró ningún micrófono.",
+    "unknown": "No se pudo iniciar el micrófono: {message}"
+  }
+}

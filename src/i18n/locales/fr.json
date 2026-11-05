@@ -1,0 +1,122 @@
+{
+  "tabs": {
+    "tuner": "Accorder",
+    "tuning": "Accordage",
+    "settings": "Réglages"
+  },
+  "pages": {
+    "strings": "Cordes une par une",
+    "pitch": "Diapason",
+    "custom": "Accordage personnalisé",
+    "detection": "Détection avancée",
+    "language": "Langue"
+  },
+  "common": {
+    "back": "Retour",
+    "reset": "Réinitialiser",
+    "apply": "Appliquer",
+    "navigation": "Navigation",
+    "listening": "Écoute en cours"
+  },
+  "tuner": {
+    "region": "Accordeur",
+    "custom": "Personnalisé",
+    "chromatic": "Chromatique",
+    "target": "cible {hz} Hz",
+    "meter": "Écart avec la note visée, en cents",
+    "tooLow": "Trop bas",
+    "tooHigh": "Trop haut",
+    "cents": "{value} cents",
+    "stringPicker": "Corde à accorder",
+    "auto": "Auto",
+    "lowSignal": "Signal trop faible. Rapprochez le micro.",
+    "moreSensitivity": "Sensibilité +",
+    "start": "Démarrer",
+    "stop": "Arrêter",
+    "hint": {
+      "idle": "Appuyez sur Démarrer",
+      "waiting": "Jouez une corde",
+      "waitingString": "Jouez {note}",
+      "flat": "Trop bas, serrez la corde",
+      "sharp": "Trop haut, desserrez la corde",
+      "inTune": "Accordé"
+    }
+  },
+  "tuning": {
+    "editStrings": "Modifier les cordes",
+    "instrument": "Instrument",
+    "tuning": "Accordage",
+    "shift": "Ton global",
+    "shiftField": "Ton global, en tons",
+    "shiftDown": "Baisser d'un huitième de ton",
+    "shiftUp": "Monter d'un huitième de ton",
+    "advanced": "Avancé",
+    "modified": "{n} modifiée | {n} modifiées",
+    "reset": "Réinitialiser l'accordage"
+  },
+  "strings": {
+    "base": "base",
+    "fixedHz": "Hz fixe",
+    "noteChanged": "note modifiée",
+    "noteOf": "Note de la corde {n}",
+    "octaveOf": "Octave de la corde {n}",
+    "freqOf": "Fréquence de la corde {n}",
+    "help": "Changer la fréquence de la corde de base décale toutes les autres.",
+    "resetAll": "Réinitialiser toutes les cordes"
+  },
+  "pitch": {
+    "a4": "La4",
+    "a4Value": "La4 = {hz} Hz",
+    "a4Field": "Fréquence du La4",
+    "common": "Valeurs courantes du La4",
+    "baseString": "Corde de base ({note})",
+    "baseField": "Fréquence de la corde de base",
+    "equivalent": "Équivaut à un ton global de {shift}."
+  },
+  "custom": {
+    "label": "Notes, de la plus grave à la plus aiguë",
+    "placeholder": "DADGBE ou D2 A2 D3 G3 B3 E4"
+  },
+  "settings": {
+    "mic": "Micro",
+    "sensitivity": "Sensibilité",
+    "meterHelp": "Jouez une corde : la barre doit dépasser le repère.",
+    "test": "Tester le micro",
+    "chromatic": "Accordeur chromatique",
+    "smoothing": "Lissage",
+    "tolerance": "Tolérance « accordé »",
+    "toleranceValue": "±{n} cents",
+    "autoGain": "Gain automatique",
+    "resetDetection": "Réinitialiser la détection",
+    "language": "Langue"
+  },
+  "units": {
+    "tone": "ton | tons"
+  },
+  "instrument": {
+    "guitar": "Guitare {n}",
+    "bass": "Basse {n}"
+  },
+  "presets": {
+    "standard": "Standard",
+    "drop": "Drop {note}"
+  },
+  "errors": {
+    "invalidHz": "Entrez une fréquence en Hz, par exemple 82,41.",
+    "invalidTones": "Écrivez un nombre de tons, par exemple −1/4 ou −0,25.",
+    "divisionByZero": "Division par zéro.",
+    "tooLarge": "Valeur trop grande (6 tons maximum).",
+    "invalidValue": "Valeur invalide.",
+    "invalidNote": "« {note} » n'est pas une note valide.",
+    "missingOctave": "Ajoutez une octave à « {note} », par exemple {note}3.",
+    "unreadableTuning": "Impossible de lire l'accordage « {tuning} ».",
+    "stringCountMismatch": "Cet accordage a {count} notes, mais l'instrument a {expected} cordes.",
+    "noDefaultTuning": "Aucun accordage par défaut pour {count} cordes. Saisissez-en un dans Accordage personnalisé.",
+    "noString": "La corde {index} n'existe pas."
+  },
+  "mic": {
+    "permission": "L'accès au micro a été refusé. Autorisez-le dans les réglages du navigateur, puis appuyez sur Démarrer.",
+    "notFound": "Aucun micro trouvé.",
+    "unknown": "Impossible de démarrer le micro : {message}"
+  }
+}

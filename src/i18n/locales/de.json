@@ -1,0 +1,122 @@
+{
+  "tabs": {
+    "tuner": "Stimmen",
+    "tuning": "Stimmung",
+    "settings": "Einstellungen"
+  },
+  "pages": {
+    "strings": "Einzelne Saiten",
+    "pitch": "Kammerton",
+    "custom": "Eigene Stimmung",
+    "detection": "Erweiterte Erkennung",
+    "language": "Sprache"
+  },
+  "common": {
+    "back": "Zurück",
+    "reset": "Zurücksetzen",
+    "apply": "Übernehmen",
+    "navigation": "Navigation",
+    "listening": "Hört zu"
+  },
+  "tuner": {
+    "region": "Stimmgerät",
+    "custom": "Eigene",
+    "chromatic": "Chromatisch",
+    "target": "Ziel {hz} Hz",
+    "meter": "Abweichung vom Zielton in Cent",
+    "tooLow": "Zu tief",
+    "tooHigh": "Zu hoch",
+    "cents": "{value} Cent",
+    "stringPicker": "Zu stimmende Saite",
+    "auto": "Auto",
+    "lowSignal": "Signal zu schwach. Mikrofon näher heranbringen.",
+    "moreSensitivity": "Empfindlichkeit +",
+    "start": "Starten",
+    "stop": "Stoppen",
+    "hint": {
+      "idle": "Auf Starten tippen",
+      "waiting": "Saite anschlagen",
+      "waitingString": "{note} anschlagen",
+      "flat": "Zu tief, Saite fester spannen",
+      "sharp": "Zu hoch, Saite lockern",
+      "inTune": "Gestimmt"
+    }
+  },
+  "tuning": {
+    "editStrings": "Saiten bearbeiten",
+    "instrument": "Instrument",
+    "tuning": "Stimmung",
+    "shift": "Tonverschiebung",
+    "shiftField": "Tonverschiebung in Ganztönen",
+    "shiftDown": "Um einen Achtelton senken",
+    "shiftUp": "Um einen Achtelton erhöhen",
+    "advanced": "Erweitert",
+    "modified": "{n} geändert",
+    "reset": "Stimmung zurücksetzen"
+  },
+  "strings": {
+    "base": "Basis",
+    "fixedHz": "feste Hz",
+    "noteChanged": "Note geändert",
+    "noteOf": "Note der Saite {n}",
+    "octaveOf": "Oktave der Saite {n}",
+    "freqOf": "Frequenz der Saite {n}",
+    "help": "Wenn sich die Frequenz der Basissaite ändert, verschieben sich alle anderen mit.",
+    "resetAll": "Alle Saiten zurücksetzen"
+  },
+  "pitch": {
+    "a4": "A4",
+    "a4Value": "A4 = {hz} Hz",
+    "a4Field": "Frequenz von A4",
+    "common": "Übliche Werte für A4",
+    "baseString": "Basissaite ({note})",
+    "baseField": "Frequenz der Basissaite",
+    "equivalent": "Entspricht einer Tonverschiebung von {shift}."
+  },
+  "custom": {
+    "label": "Noten, von der tiefsten zur höchsten",
+    "placeholder": "DADGBE oder D2 A2 D3 G3 B3 E4"
+  },
+  "settings": {
+    "mic": "Mikrofon",
+    "sensitivity": "Empfindlichkeit",
+    "meterHelp": "Saite anschlagen: Der Balken sollte die Markierung überschreiten.",
+    "test": "Mikrofon testen",
+    "chromatic": "Chromatisches Stimmgerät",
+    "smoothing": "Glättung",
+    "tolerance": "Toleranz für „gestimmt“",
+    "toleranceValue": "±{n} Cent",
+    "autoGain": "Automatische Verstärkung",
+    "resetDetection": "Erkennung zurücksetzen",
+    "language": "Sprache"
+  },
+  "units": {
+    "tone": "Ton | Töne"
+  },
+  "instrument": {
+    "guitar": "Gitarre {n}",
+    "bass": "Bass {n}"
+  },
+  "presets": {
+    "standard": "Standard",
+    "drop": "Drop {note}"
+  },
+  "errors": {
+    "invalidHz": "Frequenz in Hz eingeben, zum Beispiel 82,41.",
+    "invalidTones": "Anzahl Töne eingeben, zum Beispiel −1/4 oder −0,25.",
+    "divisionByZero": "Division durch null.",
+    "tooLarge": "Wert zu groß (maximal 6 Töne).",
+    "invalidValue": "Ungültiger Wert.",
+    "invalidNote": "„{note}“ ist keine gültige Note.",
+    "missingOctave": "Oktave zu „{note}“ hinzufügen, zum Beispiel {note}3.",
+    "unreadableTuning": "Die Stimmung „{tuning}“ konnte nicht gelesen werden.",
+    "stringCountMismatch": "Diese Stimmung hat {count} Noten, das Instrument aber {expected} Saiten.",
+    "noDefaultTuning": "Keine Standardstimmung für {count} Saiten. Unter „Eigene Stimmung“ eine eingeben.",
+    "noString": "Saite {index} existiert nicht."
+  },
+  "mic": {
+    "permission": "Der Zugriff auf das Mikrofon wurde verweigert. In den Browsereinstellungen erlauben und dann auf Starten tippen.",
+    "notFound": "Kein Mikrofon gefunden.",
+    "unknown": "Mikrofon konnte nicht gestartet werden: {message}"
+  }
+}

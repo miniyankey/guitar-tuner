@@ -1,7 +1,9 @@
 <script setup>
-// npm i @fontsource-variable/inter-tight
+// npm i vue-i18n @fontsource-variable/inter-tight
 import '@fontsource-variable/inter-tight'
 import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { SUPPORTED_LOCALES, setLocale } from '@/i18n'
 import { useTuner } from '@/composables/useTuner'
 import NumberField from './NumberField.vue'
 import {
@@ -21,6 +23,8 @@ import {
   resetString,
   resetOverrides,
 } from '@/stores/useGuitar'
+
+const { t, locale } = useI18n()
 
 /* ========================================================================== */
 /*  Micro et détection                                                        */
@@ -44,6 +48,7 @@ const audio = computed(() => {
 const {
   isListening,
   error: micError,
+  errorCode: micErrorCode,
   level,
   sinceDetection,
   reading,
@@ -62,6 +67,10 @@ const {
   inTuneCents: () => detection.tolerance,
   autoGainControl: () => detection.autoGain,
 })
+
+const micMessage = computed(() =>
+  micErrorCode.value ? t(`mic.${micErrorCode.value}`, { message: micError.value ?? '' }) : '',
+)
 
 // Signal trop faible : en écoute, aucune note, et sous le seuil depuis 3 s
 const quietFor = ref(0)
@@ -88,20 +97,21 @@ const levelPct = computed(() => (isListening.value ? toPct(level.value) : 0))
 const gatePct = `${toPct(GATE)}%`
 
 /* ========================================================================== */
-/*  Formats                                                                   */
+/*  Formats (suivent la langue : 82.41 en anglais, 82,41 ailleurs)            */
 /* ========================================================================== */
 
 const nf = (n, d = 2) =>
-  n.toLocaleString('fr-FR', {
+  n.toLocaleString(locale.value, {
     minimumFractionDigits: 0,
     maximumFractionDigits: d,
     useGrouping: false,
   })
 const fmtHz = (n) => nf(n, 2)
 
+/** Accepte le point ou la virgule, quelle que soit la langue. */
 function parseHz(str) {
   const n = Number(String(str).replace(/\s/g, '').replace(',', '.'))
-  if (!(n > 0)) throw new Error('Entrez une fréquence en Hz, par exemple 82,41.')
+  if (!(n > 0)) throw new Error(t('errors.invalidHz'))
   return n
 }
 
@@ -117,9 +127,9 @@ const UNICODE_FRACTIONS = {
 }
 
 /** -0.25 -> "−¼" ; 1.5 -> "+1½" ; 0 -> "0" */
-function fmtTones(t) {
-  if (Math.abs(t) < 0.005) return '0'
-  const abs = Math.abs(t)
+function fmtTones(v) {
+  if (Math.abs(v) < 0.005) return '0'
+  const abs = Math.abs(v)
   const eighths = Math.round(abs * 8)
   let body
   if (Math.abs(abs * 8 - eighths) < 0.04) {
@@ -128,29 +138,28 @@ function fmtTones(t) {
   } else {
     body = nf(abs, 2)
   }
-  return `${t < 0 ? '−' : '+'}${body}`
+  return `${v < 0 ? '−' : '+'}${body}`
 }
 
-/** Accepte -1/4, −0,25, +½, 1¼ ... (en tons) */
+/** Accepte -1/4, −0,25, +½, 1¼ ... (en tons). L'unité tapée (tone, ton, Ton, tono, tom...) est ignorée. */
 function parseTones(str) {
   const s = String(str)
     .trim()
     .replace(/[−–]/g, '-')
     .replace(',', '.')
     .replace(/\s+/g, '')
-    .replace(/tons?$/i, '')
+    .replace(/\p{L}+$/u, '')
   const m = /^([+-]?)(?:(\d+)\/(\d+)|(\d*\.?\d*)([⅛¼⅜½⅝¾⅞])?)$/.exec(s)
-  if (!s || !m || (!m[2] && !m[4] && !m[5]))
-    throw new Error('Écrivez un nombre de tons, par exemple −1/4 ou −0,25.')
+  if (!s || !m || (!m[2] && !m[4] && !m[5])) throw new Error(t('errors.invalidTones'))
   let n
   if (m[2]) {
-    if (Number(m[3]) === 0) throw new Error('Division par zéro.')
+    if (Number(m[3]) === 0) throw new Error(t('errors.divisionByZero'))
     n = Number(m[2]) / Number(m[3])
   } else {
     n = (m[4] ? Number(m[4]) : 0) + (m[5] ? UNICODE_FRACTIONS[m[5]] : 0)
   }
   n = m[1] === '-' ? -n : n
-  if (Math.abs(n) > 6) throw new Error('Valeur trop grande (6 tons maximum).')
+  if (Math.abs(n) > 6) throw new Error(t('errors.tooLarge'))
   return n
 }
 
@@ -158,33 +167,33 @@ function parseTones(str) {
 /*  Navigation                                                                */
 /* ========================================================================== */
 
-const TABS = { tuner: 'Accorder', tuning: 'Accordage', settings: 'Réglages' }
 const PAGES = {
-  strings: { title: 'Cordes une par une', tab: 'tuning' },
-  pitch: { title: 'Diapason', tab: 'tuning' },
-  custom: { title: 'Accordage personnalisé', tab: 'tuning' },
-  detection: { title: 'Détection avancée', tab: 'settings' },
-}
+  strings: 'tuning',
+  pitch: 'tuning',
+  custom: 'tuning',
+  detection: 'settings',
+  language: 'settings',
+} // sous-page -> onglet parent
 
 const tab = ref('tuner')
 const pages = reactive({ tuning: null, settings: null }) // sous-page ouverte, par onglet
 const page = computed(() => (tab.value === 'tuner' ? null : pages[tab.value]))
-const title = computed(() => (page.value ? PAGES[page.value].title : TABS[tab.value]))
+const title = computed(() => (page.value ? t(`pages.${page.value}`) : t(`tabs.${tab.value}`)))
 
 const formError = ref('')
 const customDraft = ref('')
 const screenEl = ref(null)
 
-function goTab(t) {
+function goTab(name) {
   formError.value = ''
-  if (tab.value === t) pages[t] = null // toucher l'onglet actif revient à sa racine
-  tab.value = t
+  if (tab.value === name) pages[name] = null // toucher l'onglet actif revient à sa racine
+  tab.value = name
 }
 function open(key) {
   formError.value = ''
-  const t = PAGES[key].tab
-  tab.value = t
-  pages[t] = key
+  const parent = PAGES[key]
+  tab.value = parent
+  pages[parent] = key
   if (key === 'custom') customDraft.value = tuningLabel.value
 }
 function back() {
@@ -193,29 +202,38 @@ function back() {
 }
 watch([tab, page], () => nextTick(() => screenEl.value && (screenEl.value.scrollTop = 0)))
 
+/** Erreurs du store (GuitarError : code + params) ou des champs (message déjà traduit). */
 function attempt(fn) {
   try {
     fn()
     formError.value = ''
   } catch (e) {
-    formError.value = String(e.message).replace('[useGuitar] ', '')
+    formError.value = e?.code
+      ? t(`errors.${e.code}`, e.params ?? {})
+      : e?.message || t('errors.invalidValue')
   }
 }
-const onInvalid = (msg) => (formError.value = msg)
+const onInvalid = (msg) => (formError.value = msg || t('errors.invalidValue'))
+
+// Un message affiché reste dans l'ancienne langue : on l'efface au changement de langue.
+watch(locale, () => (formError.value = ''))
+
+/* ========================================================================== */
+/*  Langue                                                                    */
+/* ========================================================================== */
+
+const currentLanguage = computed(
+  () => SUPPORTED_LOCALES.find((l) => l.code === locale.value)?.name ?? '',
+)
 
 /* ========================================================================== */
 /*  Accordage                                                                 */
 /* ========================================================================== */
 
-const INSTRUMENT_SHORT = {
-  'guitar-6': 'Guitare 6',
-  'guitar-7': 'Guitare 7',
-  'guitar-8': 'Guitare 8',
-  'bass-4': 'Basse 4',
-  'bass-5': 'Basse 5',
-}
-const PRESET_FR = {
-  standard: 'Standard',
+const instrumentLabel = (i) => t(`instrument.${i.guitarType}`, { n: i.numberStrings })
+
+// Noms propres, identiques dans toutes les langues
+const PRESET_NAMES = {
   dropD: 'Drop D',
   dadgad: 'DADGAD',
   openG: 'Open G',
@@ -232,8 +250,8 @@ function dropOf(tuning) {
   if (!notes.length) return null
   const n = notes[0]
   const v = SEMI[n[0]] + (n[1] === '#' ? 1 : n[1] === 'b' ? -1 : 0) - 2
-  const name = NOTE_NAMES[((v % 12) + 12) % 12]
-  return { id: 'drop', label: `Drop ${name}`, tuning: name + notes.slice(1).join('') }
+  const note = NOTE_NAMES[((v % 12) + 12) % 12]
+  return { id: 'drop', note, tuning: note + notes.slice(1).join('') }
 }
 
 const tuningLabel = computed(() => guitar.strings.map((s) => s.label).join(''))
@@ -243,16 +261,25 @@ const customCount = computed(
 )
 
 const presetList = computed(() => {
+  let list
   if (guitar.guitarType === 'guitar' && guitar.numberStrings === 6) {
-    return TUNING_PRESETS.filter((p) => !HIDDEN_PRESETS.has(p.id)).map((p) => ({
+    list = TUNING_PRESETS.filter((p) => !HIDDEN_PRESETS.has(p.id)).map((p) => ({
       id: p.id,
-      label: PRESET_FR[p.id] ?? p.label,
       tuning: p.tuning,
     }))
+  } else {
+    const std = setDefaultTuning(guitar.numberStrings, guitar.guitarType)
+    list = std ? [{ id: 'standard', tuning: std }, dropOf(std)].filter(Boolean) : []
   }
-  const std = setDefaultTuning(guitar.numberStrings, guitar.guitarType)
-  if (!std) return []
-  return [{ id: 'standard', label: 'Standard', tuning: std }, dropOf(std)].filter(Boolean)
+  return list.map((p) => ({
+    ...p,
+    label:
+      p.id === 'standard'
+        ? t('presets.standard')
+        : p.id === 'drop'
+          ? t('presets.drop', { note: p.note })
+          : (PRESET_NAMES[p.id] ?? p.id),
+  }))
 })
 const activePreset = computed(() =>
   customCount.value ? null : presetList.value.find((p) => p.tuning === tuningLabel.value),
@@ -261,7 +288,7 @@ const activePreset = computed(() =>
 const shiftTones = computed(() => guitar.shiftCents / 200)
 const hasShift = computed(() => Math.abs(shiftTones.value) >= 0.005)
 const shiftText = computed(
-  () => `${fmtTones(shiftTones.value)} ${Math.abs(shiftTones.value) > 1 ? 'tons' : 'ton'}`,
+  () => `${fmtTones(shiftTones.value)} ${t('units.tone', Math.abs(shiftTones.value) > 1 ? 2 : 1)}`,
 )
 const SHIFT_CHIPS = [-1, -0.5, -0.25, 0, 0.25, 0.5, 1]
 const stepShift = (dir) =>
@@ -308,21 +335,27 @@ const bigNote = computed(() => {
   return '–'
 })
 
-const hint = computed(
-  () =>
-    ({
-      idle: 'Appuyez sur Démarrer',
-      waiting: targetString.value ? `Jouez ${targetString.value.name}` : 'Jouez une corde',
-      flat: 'Trop bas, serrez la corde',
-      sharp: 'Trop haut, desserrez la corde',
-      'in-tune': 'Accordé',
-    })[status.value],
-)
+const hint = computed(() => {
+  switch (status.value) {
+    case 'idle':
+      return t('tuner.hint.idle')
+    case 'waiting':
+      return targetString.value
+        ? t('tuner.hint.waitingString', { note: targetString.value.name })
+        : t('tuner.hint.waiting')
+    case 'flat':
+      return t('tuner.hint.flat')
+    case 'sharp':
+      return t('tuner.hint.sharp')
+    default:
+      return t('tuner.hint.inTune')
+  }
+})
 
 const centsText = computed(() => {
   if (!reading.value) return ''
   const c = Math.round(reading.value.cents)
-  return `${c > 0 ? '+' : c < 0 ? '−' : ''}${Math.abs(c)} cents`
+  return t('tuner.cents', { value: `${c > 0 ? '+' : c < 0 ? '−' : ''}${Math.abs(c)}` })
 })
 
 const markLeft = computed(() => `${((reading.value?.needle ?? 0) + 1) * 50}%`)
@@ -332,7 +365,13 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
 <template>
   <div class="app">
     <header v-if="tab !== 'tuner'" class="top">
-      <button v-if="page" type="button" class="icon-btn" aria-label="Retour" @click="back">
+      <button
+        v-if="page"
+        type="button"
+        class="icon-btn"
+        :aria-label="t('common.back')"
+        @click="back"
+      >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
       </button>
       <h1>{{ title }}</h1>
@@ -342,13 +381,13 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
       <p v-if="formError && tab !== 'tuner'" class="notice" role="alert">{{ formError }}</p>
 
       <!-- ============================== ACCORDER ============================== -->
-      <section v-if="tab === 'tuner'" class="tune" aria-label="Accordeur">
+      <section v-if="tab === 'tuner'" class="tune" :aria-label="t('tuner.region')">
         <button type="button" class="summary" @click="goTab('tuning')">
           <span class="summary__main">
-            {{ activePreset?.label ?? 'Personnalisé' }} <b>{{ tuningLabel }}</b>
+            {{ activePreset?.label ?? t('tuner.custom') }} <b>{{ tuningLabel }}</b>
           </span>
           <span v-if="hasShift" class="badge">{{ shiftText }}</span>
-          <span v-if="mode === 'chromatic'" class="badge">Chromatique</span>
+          <span v-if="mode === 'chromatic'" class="badge">{{ t('tuner.chromatic') }}</span>
           <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
         </button>
 
@@ -357,7 +396,7 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
           <div class="stage__freq">
             <template v-if="reading">
               <span>{{ nf(reading.frequency, 1) }} Hz</span>
-              <span>cible {{ nf(reading.targetFrequency, 1) }} Hz</span>
+              <span>{{ t('tuner.target', { hz: nf(reading.targetFrequency, 1) }) }}</span>
             </template>
             <span v-else>&nbsp;</span>
           </div>
@@ -365,7 +404,7 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
           <div
             class="bar"
             role="meter"
-            aria-label="Écart avec la note visée, en cents"
+            :aria-label="t('tuner.meter')"
             aria-valuemin="-50"
             aria-valuemax="50"
             :aria-valuenow="reading ? Math.round(reading.cents) : 0"
@@ -380,9 +419,9 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
             <div class="bar__mark" :class="{ idle: !reading }" :style="{ left: markLeft }" />
           </div>
           <div class="bar__legend">
-            <span>Trop bas</span>
+            <span>{{ t('tuner.tooLow') }}</span>
             <b>{{ centsText }}</b>
-            <span>Trop haut</span>
+            <span>{{ t('tuner.tooHigh') }}</span>
           </div>
 
           <p class="stage__hint">{{ hint }}</p>
@@ -392,7 +431,7 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
           v-if="mode !== 'chromatic'"
           class="pills"
           role="radiogroup"
-          aria-label="Corde à accorder"
+          :aria-label="t('tuner.stringPicker')"
         >
           <button
             type="button"
@@ -402,7 +441,7 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
             :class="{ on: mode === 'auto' }"
             @click="mode = 'auto'"
           >
-            Auto
+            {{ t('tuner.auto') }}
           </button>
           <button
             v-for="s in guitar.strings"
@@ -422,14 +461,14 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
         </div>
 
         <div v-if="lowSignal" class="notice notice--row" role="status">
-          <span>Signal trop faible. Rapprochez le micro.</span>
+          <span>{{ t('tuner.lowSignal') }}</span>
           <button
             v-if="detection.sensitivity < 10"
             type="button"
             class="chip chip--small"
             @click="boost"
           >
-            Sensibilité +
+            {{ t('tuner.moreSensitivity') }}
           </button>
         </div>
 
@@ -439,9 +478,9 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
             <i class="meter__gate" :style="{ left: gatePct }" />
           </div>
           <button type="button" class="cta" :class="{ on: isListening }" @click="toggle">
-            {{ isListening ? 'Arrêter' : 'Démarrer' }}
+            {{ isListening ? t('tuner.stop') : t('tuner.start') }}
           </button>
-          <p v-if="micError" class="notice" role="alert">{{ micError }}</p>
+          <p v-if="micMessage" class="notice" role="alert">{{ micMessage }}</p>
         </div>
       </section>
 
@@ -462,7 +501,7 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
               </span>
             </span>
             <span class="strip__edit">
-              Modifier les cordes
+              {{ t('tuning.editStrings') }}
               <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M9 5l7 7-7 7" />
               </svg>
@@ -470,8 +509,8 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
           </button>
 
           <section class="group">
-            <h2>Instrument</h2>
-            <div class="chips" role="radiogroup" aria-label="Instrument">
+            <h2>{{ t('tuning.instrument') }}</h2>
+            <div class="chips" role="radiogroup" :aria-label="t('tuning.instrument')">
               <button
                 v-for="i in INSTRUMENTS"
                 :key="i.id"
@@ -482,14 +521,14 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
                 :aria-checked="instrumentId === i.id"
                 @click="onInstrument(i.id)"
               >
-                {{ INSTRUMENT_SHORT[i.id] }}
+                {{ instrumentLabel(i) }}
               </button>
             </div>
           </section>
 
           <section class="group">
-            <h2>Accordage</h2>
-            <div class="list" role="radiogroup" aria-label="Accordage">
+            <h2>{{ t('tuning.tuning') }}</h2>
+            <div class="list" role="radiogroup" :aria-label="t('tuning.tuning')">
               <button
                 v-for="p in presetList"
                 :key="p.id"
@@ -519,7 +558,7 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
                 role="radio"
                 @click="open('custom')"
               >
-                <span class="row__label">Personnalisé</span>
+                <span class="row__label">{{ t('tuner.custom') }}</span>
                 <span class="row__value">{{ activePreset ? '' : tuningLabel }}</span>
                 <span class="row__end">
                   <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
@@ -531,26 +570,26 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
           </section>
 
           <section class="group">
-            <h2>Ton global</h2>
-            <div class="chips chips--row" role="radiogroup" aria-label="Ton global">
+            <h2>{{ t('tuning.shift') }}</h2>
+            <div class="chips chips--row" role="radiogroup" :aria-label="t('tuning.shift')">
               <button
-                v-for="t in SHIFT_CHIPS"
-                :key="t"
+                v-for="v in SHIFT_CHIPS"
+                :key="v"
                 type="button"
                 role="radio"
                 class="chip"
-                :class="{ on: Math.abs(shiftTones - t) < 0.001 }"
-                :aria-checked="Math.abs(shiftTones - t) < 0.001"
-                @click="attempt(() => setGlobalShift(t))"
+                :class="{ on: Math.abs(shiftTones - v) < 0.001 }"
+                :aria-checked="Math.abs(shiftTones - v) < 0.001"
+                @click="attempt(() => setGlobalShift(v))"
               >
-                {{ fmtTones(t) }}
+                {{ fmtTones(v) }}
               </button>
             </div>
             <div class="stepper">
               <button
                 type="button"
                 class="chip"
-                aria-label="Baisser d'un huitième de ton"
+                :aria-label="t('tuning.shiftDown')"
                 @click="stepShift(-1)"
               >
                 −⅛
@@ -560,15 +599,15 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
                 :format="fmtTones"
                 :parse="parseTones"
                 inputmode="text"
-                unit="ton"
-                label="Ton global, en tons"
+                :unit="t('units.tone', 1)"
+                :label="t('tuning.shiftField')"
                 @update:model-value="(v) => attempt(() => setGlobalShift(v))"
                 @invalid="onInvalid"
               />
               <button
                 type="button"
                 class="chip"
-                aria-label="Monter d'un huitième de ton"
+                :aria-label="t('tuning.shiftUp')"
                 @click="stepShift(1)"
               >
                 +⅛
@@ -577,13 +616,13 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
           </section>
 
           <section class="group">
-            <h2>Avancé</h2>
+            <h2>{{ t('tuning.advanced') }}</h2>
             <div class="list">
               <button type="button" class="row" @click="open('strings')">
-                <span class="row__label">Cordes une par une</span>
-                <span class="row__value">
-                  {{ customCount ? `${customCount} modifiée${customCount > 1 ? 's' : ''}` : '' }}
-                </span>
+                <span class="row__label">{{ t('pages.strings') }}</span>
+                <span class="row__value">{{
+                  customCount ? t('tuning.modified', customCount) : ''
+                }}</span>
                 <span class="row__end">
                   <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M9 5l7 7-7 7" />
@@ -591,8 +630,10 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
                 </span>
               </button>
               <button type="button" class="row" @click="open('pitch')">
-                <span class="row__label">Diapason</span>
-                <span class="row__value">La4 = {{ nf(guitar.referencePitch, 1) }} Hz</span>
+                <span class="row__label">{{ t('pages.pitch') }}</span>
+                <span class="row__value">{{
+                  t('pitch.a4Value', { hz: nf(guitar.referencePitch, 1) })
+                }}</span>
                 <span class="row__end">
                   <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M9 5l7 7-7 7" />
@@ -603,7 +644,7 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
           </section>
 
           <button type="button" class="btn btn--ghost" @click="resetTuning">
-            Réinitialiser l'accordage
+            {{ t('tuning.reset') }}
           </button>
         </div>
 
@@ -618,21 +659,21 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
             >
               <div class="srow__name">
                 <b>{{ s.name }}</b>
-                <span v-if="s.index === 0" class="tag">base</span>
-                <span v-else-if="s.customFrequency" class="tag">Hz fixe</span>
-                <span v-if="s.customNote" class="tag">note modifiée</span>
+                <span v-if="s.index === 0" class="tag">{{ t('strings.base') }}</span>
+                <span v-else-if="s.customFrequency" class="tag">{{ t('strings.fixedHz') }}</span>
+                <span v-if="s.customNote" class="tag">{{ t('strings.noteChanged') }}</span>
               </div>
               <div class="srow__fields">
                 <select
                   :value="s.note"
-                  :aria-label="`Note de la corde ${s.stringNumber}`"
+                  :aria-label="t('strings.noteOf', { n: s.stringNumber })"
                   @change="onNoteName(s, $event)"
                 >
                   <option v-for="n in NOTE_NAMES" :key="n" :value="n">{{ n }}</option>
                 </select>
                 <select
                   :value="s.octave"
-                  :aria-label="`Octave de la corde ${s.stringNumber}`"
+                  :aria-label="t('strings.octaveOf', { n: s.stringNumber })"
                   @change="onOctave(s, $event)"
                 >
                   <option v-for="o in OCTAVES" :key="o" :value="o">{{ o }}</option>
@@ -642,7 +683,7 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
                   :format="fmtHz"
                   :parse="parseHz"
                   unit="Hz"
-                  :label="`Fréquence de la corde ${s.stringNumber}`"
+                  :label="t('strings.freqOf', { n: s.stringNumber })"
                   @update:model-value="(v) => attempt(() => setStringFrequency(s.index, v))"
                   @invalid="onInvalid"
                 />
@@ -653,36 +694,36 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
                 class="link"
                 @click="attempt(() => resetString(s.index))"
               >
-                Réinitialiser
+                {{ t('common.reset') }}
               </button>
             </li>
           </ul>
-          <p class="help">Changer la fréquence de la corde de base décale toutes les autres.</p>
+          <p class="help">{{ t('strings.help') }}</p>
           <button
             v-if="customCount"
             type="button"
             class="btn btn--ghost"
             @click="attempt(resetOverrides)"
           >
-            Réinitialiser toutes les cordes
+            {{ t('strings.resetAll') }}
           </button>
         </div>
 
         <!-- Diapason -->
         <div v-else-if="page === 'pitch'" class="stack">
           <div class="field">
-            <span>La4</span>
+            <span>{{ t('pitch.a4') }}</span>
             <NumberField
               :model-value="guitar.referencePitch"
               :format="fmtHz"
               :parse="parseHz"
               unit="Hz"
-              label="Fréquence du La4"
+              :label="t('pitch.a4Field')"
               @update:model-value="(v) => attempt(() => setReferencePitch(v))"
               @invalid="onInvalid"
             />
           </div>
-          <div class="chips" role="group" aria-label="Valeurs courantes du La4">
+          <div class="chips" role="group" :aria-label="t('pitch.common')">
             <button
               v-for="hz in A4_CHIPS"
               :key="hz"
@@ -695,37 +736,37 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
             </button>
           </div>
           <div class="field">
-            <span>Corde de base ({{ guitar.strings[0]?.name }})</span>
+            <span>{{ t('pitch.baseString', { note: guitar.strings[0]?.name ?? '' }) }}</span>
             <NumberField
               :model-value="guitar.firstStringFrequency"
               :format="fmtHz"
               :parse="parseHz"
               unit="Hz"
-              label="Fréquence de la corde de base"
+              :label="t('pitch.baseField')"
               @update:model-value="(v) => attempt(() => setFirstStringFrequency(v))"
               @invalid="onInvalid"
             />
           </div>
-          <p class="help">Équivaut à un ton global de {{ shiftText }}.</p>
+          <p class="help">{{ t('pitch.equivalent', { shift: shiftText }) }}</p>
         </div>
 
         <!-- Accordage personnalisé -->
         <div v-else-if="page === 'custom'" class="stack">
           <div class="field">
-            <span>Notes, de la plus grave à la plus aiguë</span>
+            <span>{{ t('custom.label') }}</span>
             <input
               v-model="customDraft"
               type="text"
               class="text"
-              placeholder="DADGBE ou D2 A2 D3 G3 B3 E4"
+              :placeholder="t('custom.placeholder')"
               autocomplete="off"
               autocapitalize="characters"
               spellcheck="false"
-              aria-label="Accordage personnalisé"
+              :aria-label="t('pages.custom')"
               @keydown.enter.prevent="applyCustom"
             />
           </div>
-          <button type="button" class="btn" @click="applyCustom">Appliquer</button>
+          <button type="button" class="btn" @click="applyCustom">{{ t('common.apply') }}</button>
         </div>
       </template>
 
@@ -733,11 +774,11 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
       <template v-else>
         <div v-if="!page" class="stack">
           <section class="group">
-            <h2>Micro</h2>
+            <h2>{{ t('settings.mic') }}</h2>
             <div class="mic">
               <label class="slider">
                 <span
-                  >Sensibilité <b>{{ detection.sensitivity }}/10</b></span
+                  >{{ t('settings.sensitivity') }} <b>{{ detection.sensitivity }}/10</b></span
                 >
                 <input
                   v-model.number="detection.sensitivity"
@@ -751,21 +792,34 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
                 <i class="meter__fill" :style="{ width: levelPct + '%' }" />
                 <i class="meter__gate" :style="{ left: gatePct }" />
               </div>
-              <p class="help">Jouez une corde : la barre doit dépasser le repère.</p>
+              <p class="help">{{ t('settings.meterHelp') }}</p>
               <button v-if="!isListening" type="button" class="btn btn--ghost" @click="start">
-                Tester le micro
+                {{ t('settings.test') }}
               </button>
+              <p v-if="micMessage" class="notice" role="alert">{{ micMessage }}</p>
             </div>
           </section>
 
           <div class="list">
             <label class="row row--switch">
-              <span class="row__label">Accordeur chromatique</span>
+              <span class="row__label">{{ t('settings.chromatic') }}</span>
               <input v-model="chromatic" type="checkbox" role="switch" />
             </label>
             <button type="button" class="row" @click="open('detection')">
-              <span class="row__label">Détection avancée</span>
+              <span class="row__label">{{ t('pages.detection') }}</span>
               <span class="row__value" />
+              <span class="row__end">
+                <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </button>
+          </div>
+
+          <div class="list">
+            <button type="button" class="row" @click="open('language')">
+              <span class="row__label">{{ t('settings.language') }}</span>
+              <span class="row__value">{{ currentLanguage }}</span>
               <span class="row__end">
                 <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M9 5l7 7-7 7" />
@@ -778,38 +832,61 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
         <div v-else-if="page === 'detection'" class="stack">
           <label class="slider">
             <span
-              >Lissage <b>{{ detection.smoothing }}</b></span
+              >{{ t('settings.smoothing') }} <b>{{ detection.smoothing }}</b></span
             >
             <input v-model.number="detection.smoothing" type="range" min="1" max="9" step="1" />
           </label>
           <label class="slider">
-            <span
-              >Tolérance « accordé » <b>±{{ detection.tolerance }} cents</b></span
-            >
+            <span>
+              {{ t('settings.tolerance') }}
+              <b>{{ t('settings.toleranceValue', { n: detection.tolerance }) }}</b>
+            </span>
             <input v-model.number="detection.tolerance" type="range" min="1" max="10" step="1" />
           </label>
           <div class="list">
             <label class="row row--switch">
-              <span class="row__label">Gain automatique du téléphone</span>
+              <span class="row__label">{{ t('settings.autoGain') }}</span>
               <input v-model="detection.autoGain" type="checkbox" role="switch" />
             </label>
           </div>
           <button type="button" class="btn btn--ghost" @click="resetDetection">
-            Réinitialiser la détection
+            {{ t('settings.resetDetection') }}
           </button>
+        </div>
+
+        <div v-else-if="page === 'language'" class="stack">
+          <div class="list" role="radiogroup" :aria-label="t('settings.language')">
+            <button
+              v-for="l in SUPPORTED_LOCALES"
+              :key="l.code"
+              type="button"
+              class="row"
+              role="radio"
+              :lang="l.code"
+              :aria-checked="locale === l.code"
+              @click="setLocale(l.code)"
+            >
+              <span class="row__label">{{ l.name }}</span>
+              <span class="row__end">
+                <svg v-if="locale === l.code" class="check" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 12.5l4.5 4.5L19 7.5" />
+                </svg>
+              </span>
+            </button>
+          </div>
         </div>
       </template>
     </main>
 
-    <nav class="nav" aria-label="Navigation">
+    <nav class="nav" :aria-label="t('common.navigation')">
       <button
         type="button"
         :aria-current="tab === 'tuner' ? 'page' : undefined"
         @click="goTab('tuner')"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h3l2-6 4 12 3-9 2 3h4" /></svg>
-        <span>{{ TABS.tuner }}</span>
-        <i v-if="isListening" class="dot" />
+        <span>{{ t('tabs.tuner') }}</span>
+        <i v-if="isListening" class="dot" role="img" :aria-label="t('common.listening')" />
       </button>
       <button
         type="button"
@@ -819,7 +896,7 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M9 3v7a3 3 0 0 0 6 0V3M12 13v8" />
         </svg>
-        <span>{{ TABS.tuning }}</span>
+        <span>{{ t('tabs.tuning') }}</span>
       </button>
       <button
         type="button"
@@ -831,7 +908,7 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
           <circle cx="16" cy="7" r="2" />
           <circle cx="8" cy="17" r="2" />
         </svg>
-        <span>{{ TABS.settings }}</span>
+        <span>{{ t('tabs.settings') }}</span>
       </button>
     </nav>
   </div>

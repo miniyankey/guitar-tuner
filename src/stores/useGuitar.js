@@ -46,12 +46,25 @@ const LOWEST_MIDI = {
 
 const mod = (n, m) => ((n % m) + m) % m
 
+/**
+ * Errors carry a stable `code` and `params`, so the UI can translate them.
+ * The English `message` is for developers and logs.
+ */
+export class GuitarError extends Error {
+  constructor(code, params = {}, message = code) {
+    super(`[useGuitar] ${message}`)
+    this.name = 'GuitarError'
+    this.code = code
+    this.params = params
+  }
+}
+
 export const midiToFreq = (midi, a4 = 440) => a4 * 2 ** ((midi - 69) / 12)
 export const midiToName = (midi) => `${NOTE_NAMES[mod(midi, 12)]}${Math.floor(midi / 12) - 1}`
 
 function assertHz(hz) {
   if (!Number.isFinite(hz) || hz <= 0) {
-    throw new Error('[useGuitar] Frequency must be a positive number of Hz.')
+    throw new GuitarError('invalidHz', {}, 'Frequency must be a positive number of Hz.')
   }
   return hz
 }
@@ -71,7 +84,7 @@ function tokenize(tuning) {
 
 function parseNote(token) {
   const m = /^([A-Ga-g])([#b♯♭]?)(-?\d+)?$/.exec(String(token).trim())
-  if (!m) throw new Error(`[useGuitar] Invalid note "${token}"`)
+  if (!m) throw new GuitarError('invalidNote', { note: String(token) }, `Invalid note "${token}"`)
   const letter = m[1].toUpperCase()
   const acc = m[2] === '#' || m[2] === '♯' ? 1 : m[2] ? -1 : 0
   return {
@@ -84,7 +97,8 @@ function parseNote(token) {
 /** "D#3" -> MIDI number. The octave is required. */
 export function noteToMidi(note) {
   const n = parseNote(note)
-  if (n.octave === null) throw new Error(`[useGuitar] Add an octave to "${note}", like ${note}3.`)
+  if (n.octave === null)
+    throw new GuitarError('missingOctave', { note }, `Add an octave to "${note}", like ${note}3.`)
   return (n.octave + 1) * 12 + n.base
 }
 
@@ -125,10 +139,18 @@ function resolveModel(tuningModel, lowestMidi = 40) {
 function build(pitch, tuningModel, numberStrings, lowestMidi, overrides = {}) {
   const model = resolveModel(tuningModel, lowestMidi)
 
-  if (!model.length) throw new Error(`[useGuitar] Could not read the tuning "${tuningModel}".`)
+  if (!model.length) {
+    throw new GuitarError(
+      'unreadableTuning',
+      { tuning: String(tuningModel) },
+      `Could not read the tuning "${tuningModel}".`,
+    )
+  }
   if (numberStrings != null && model.length !== numberStrings) {
-    throw new Error(
-      `[useGuitar] Tuning "${tuningModel}" has ${model.length} notes but numberStrings is ${numberStrings}`,
+    throw new GuitarError(
+      'stringCountMismatch',
+      { tuning: String(tuningModel), count: model.length, expected: numberStrings },
+      `Tuning "${tuningModel}" has ${model.length} notes but numberStrings is ${numberStrings}`,
     )
   }
 
@@ -251,8 +273,10 @@ const setGuitar = (props = {}) => {
   const tuningModel = custom ?? setDefaultTuning(numberStrings, guitarType)
 
   if (!tuningModel) {
-    throw new Error(
-      `[useGuitar] No default tuning for a ${numberStrings}-string ${guitarType}. Provide "tuningModel".`,
+    throw new GuitarError(
+      'noDefaultTuning',
+      { count: numberStrings },
+      `No default tuning for a ${numberStrings}-string ${guitarType}. Provide "tuningModel".`,
     )
   }
 
@@ -296,7 +320,13 @@ const setTuningModel = (model) => {
 /** Switch instrument / string count (default tuning, keeps the pitch base). */
 const setInstrument = (guitarType, numberStrings) => {
   const tuningModel = setDefaultTuning(numberStrings, guitarType)
-  if (!tuningModel) throw new Error(`[useGuitar] No default tuning for ${numberStrings} strings.`)
+  if (!tuningModel) {
+    throw new GuitarError(
+      'noDefaultTuning',
+      { count: numberStrings },
+      `No default tuning for ${numberStrings} strings.`,
+    )
+  }
   commit({
     guitarType,
     numberStrings,
@@ -308,7 +338,7 @@ const setInstrument = (guitarType, numberStrings) => {
 
 function patchOverride(i, patch) {
   if (!Number.isInteger(i) || i < 0 || i >= state.numberStrings) {
-    throw new Error(`[useGuitar] No string at index ${i}.`)
+    throw new GuitarError('noString', { index: i + 1 }, `No string at index ${i}.`)
   }
   const next = { ...state.overrides }
   const merged = { ...next[i], ...patch }

@@ -1,0 +1,122 @@
+{
+  "tabs": {
+    "tuner": "Afinar",
+    "tuning": "Afinação",
+    "settings": "Definições"
+  },
+  "pages": {
+    "strings": "Corda a corda",
+    "pitch": "Diapasão",
+    "custom": "Afinação personalizada",
+    "detection": "Deteção avançada",
+    "language": "Idioma"
+  },
+  "common": {
+    "back": "Voltar",
+    "reset": "Repor",
+    "apply": "Aplicar",
+    "navigation": "Navegação",
+    "listening": "A ouvir"
+  },
+  "tuner": {
+    "region": "Afinador",
+    "custom": "Personalizada",
+    "chromatic": "Cromático",
+    "target": "alvo {hz} Hz",
+    "meter": "Desvio em relação à nota alvo, em cents",
+    "tooLow": "Demasiado grave",
+    "tooHigh": "Demasiado agudo",
+    "cents": "{value} cents",
+    "stringPicker": "Corda a afinar",
+    "auto": "Auto",
+    "lowSignal": "Sinal demasiado fraco. Aproxime o microfone.",
+    "moreSensitivity": "Sensibilidade +",
+    "start": "Iniciar",
+    "stop": "Parar",
+    "hint": {
+      "idle": "Prima Iniciar",
+      "waiting": "Toque uma corda",
+      "waitingString": "Toque {note}",
+      "flat": "Demasiado grave, aperte a corda",
+      "sharp": "Demasiado agudo, alivie a corda",
+      "inTune": "Afinada"
+    }
+  },
+  "tuning": {
+    "editStrings": "Editar cordas",
+    "instrument": "Instrumento",
+    "tuning": "Afinação",
+    "shift": "Transposição",
+    "shiftField": "Transposição, em tons",
+    "shiftDown": "Descer um oitavo de tom",
+    "shiftUp": "Subir um oitavo de tom",
+    "advanced": "Avançado",
+    "modified": "{n} alterada | {n} alteradas",
+    "reset": "Repor a afinação"
+  },
+  "strings": {
+    "base": "base",
+    "fixedHz": "Hz fixo",
+    "noteChanged": "nota alterada",
+    "noteOf": "Nota da corda {n}",
+    "octaveOf": "Oitava da corda {n}",
+    "freqOf": "Frequência da corda {n}",
+    "help": "Alterar a frequência da corda base desloca todas as outras.",
+    "resetAll": "Repor todas as cordas"
+  },
+  "pitch": {
+    "a4": "Lá4",
+    "a4Value": "Lá4 = {hz} Hz",
+    "a4Field": "Frequência do Lá4",
+    "common": "Valores habituais do Lá4",
+    "baseString": "Corda base ({note})",
+    "baseField": "Frequência da corda base",
+    "equivalent": "Equivale a uma transposição de {shift}."
+  },
+  "custom": {
+    "label": "Notas, da mais grave à mais aguda",
+    "placeholder": "DADGBE ou D2 A2 D3 G3 B3 E4"
+  },
+  "settings": {
+    "mic": "Microfone",
+    "sensitivity": "Sensibilidade",
+    "meterHelp": "Toque uma corda: a barra deve ultrapassar a marca.",
+    "test": "Testar o microfone",
+    "chromatic": "Afinador cromático",
+    "smoothing": "Suavização",
+    "tolerance": "Tolerância de «afinada»",
+    "toleranceValue": "±{n} cents",
+    "autoGain": "Ganho automático",
+    "resetDetection": "Repor a deteção",
+    "language": "Idioma"
+  },
+  "units": {
+    "tone": "tom | tons"
+  },
+  "instrument": {
+    "guitar": "Guitarra {n}",
+    "bass": "Baixo {n}"
+  },
+  "presets": {
+    "standard": "Padrão",
+    "drop": "Drop {note}"
+  },
+  "errors": {
+    "invalidHz": "Introduza uma frequência em Hz, por exemplo 82,41.",
+    "invalidTones": "Escreva um número de tons, por exemplo −1/4 ou −0,25.",
+    "divisionByZero": "Divisão por zero.",
+    "tooLarge": "Valor demasiado grande (máximo 6 tons).",
+    "invalidValue": "Valor inválido.",
+    "invalidNote": "«{note}» não é uma nota válida.",
+    "missingOctave": "Acrescente uma oitava a «{note}», por exemplo {note}3.",
+    "unreadableTuning": "Não foi possível ler a afinação «{tuning}».",
+    "stringCountMismatch": "Esta afinação tem {count} notas, mas o instrumento tem {expected} cordas.",
+    "noDefaultTuning": "Não há afinação predefinida para {count} cordas. Escreva uma em Afinação personalizada.",
+    "noString": "A corda {index} não existe."
+  },
+  "mic": {
+    "permission": "O acesso ao microfone foi recusado. Autorize-o nas definições do navegador e prima Iniciar.",
+    "notFound": "Nenhum microfone encontrado.",
+    "unknown": "Não foi possível iniciar o microfone: {message}"
+  }
+}
