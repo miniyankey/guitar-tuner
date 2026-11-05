@@ -1141,8 +1141,8 @@ label:focus-within {
   flex: 1;
   flex-direction: column;
   justify-content: center;
-  min-height: 310px;
-  padding: 22px 20px 18px;
+  min-height: 168px;
+  padding: 20px 18px 16px;
   border-radius: 24px;
   background: var(--blue-50);
   color: var(--fg);
@@ -1160,7 +1160,7 @@ label:focus-within {
   background: var(--blue);
 }
 .stage__note {
-  font-size: clamp(5.5rem, 30vw, 8.5rem);
+  font-size: clamp(4rem, 24vw, 7rem);
   font-weight: 700;
   line-height: 0.9;
   letter-spacing: -0.05em;
@@ -1248,9 +1248,9 @@ label:focus-within {
   font-variant-numeric: tabular-nums;
 }
 .stage__hint {
-  min-height: 1.6em;
-  margin: 16px 0 0;
-  font-size: 1.3rem;
+  min-height: 1em;
+  margin: 12px 0 0;
+  font-size: 1rem;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
@@ -1261,8 +1261,8 @@ label:focus-within {
   gap: 8px;
 }
 .pill {
-  min-height: 48px;
-  padding: 0 6px;
+  min-height: 36px;
+  padding: 0 4px;
   border: 1.5px solid var(--blue-200);
   border-radius: 14px;
   background: #fff;
@@ -1317,7 +1317,7 @@ label:focus-within {
 
 .cta,
 .btn {
-  min-height: 56px;
+  min-height: 48px;
   padding: 0 24px;
   border: 2px solid var(--blue);
   border-radius: 16px;
