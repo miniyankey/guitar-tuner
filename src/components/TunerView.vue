@@ -1141,8 +1141,8 @@ label:focus-within {
   flex: 1;
   flex-direction: column;
   justify-content: center;
-  min-height: 168px;
-  padding: 20px 18px 16px;
+  min-height: 120px;
+  padding: 20px 12px 16px;
   border-radius: 24px;
   background: var(--blue-50);
   color: var(--fg);
@@ -1160,7 +1160,7 @@ label:focus-within {
   background: var(--blue);
 }
 .stage__note {
-  font-size: clamp(4rem, 24vw, 7rem);
+  font-size: clamp(3rem, 16vw, 5rem);
   font-weight: 700;
   line-height: 0.9;
   letter-spacing: -0.05em;
@@ -1169,22 +1169,22 @@ label:focus-within {
   display: flex;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 2px 16px;
+  gap: 1px 8px;
   min-height: 1.5em;
-  margin-top: 12px;
+  margin-top: 8px;
   font-size: 1.05rem;
   font-variant-numeric: tabular-nums;
   opacity: 0.8;
 }
 .bar {
   position: relative;
-  height: 48px;
+  height: 32px;
   margin: 24px 4px 4px;
 }
 .bar__track {
   position: absolute;
   inset: 50% 0 auto;
-  height: 10px;
+  height: 8px;
   transform: translateY(-50%);
   border-radius: 5px;
   background: var(--track);
@@ -1193,7 +1193,7 @@ label:focus-within {
   position: absolute;
   top: 50%;
   left: 50%;
-  height: 26px;
+  height: 20px;
   transform: translate(-50%, -50%);
   border-radius: 8px;
   background: var(--zone);
@@ -1202,13 +1202,13 @@ label:focus-within {
   position: absolute;
   top: 50%;
   width: 2px;
-  height: 16px;
+  height: 12px;
   transform: translate(-50%, -50%);
   background: var(--tick);
   opacity: 0.55;
 }
 .bar__tick--mid {
-  height: 34px;
+  height: 24px;
   opacity: 0.9;
 }
 .bar__mark {
@@ -1261,12 +1261,13 @@ label:focus-within {
   gap: 8px;
 }
 .pill {
-  min-height: 36px;
-  padding: 0 4px;
+  min-height: 28px;
+  padding: 0 2px;
   border: 1.5px solid var(--blue-200);
   border-radius: 14px;
   background: #fff;
   font-weight: 650;
+  font-size: 0.8rem;
   cursor: pointer;
   transition:
     background 0.15s,
