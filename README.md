@@ -32,7 +32,7 @@ No install, no account, no ads. The sound is analyzed on your device and never s
 ```
 src/
   components/
-    Tuner.vue          # the interface (Tune, Tuning and Settings tabs)
+    TunerView.vue          # the interface (Tune, Tuning and Settings tabs)
     NumberField.vue    # number input that isn't overwritten while the tuner is listening
   composables/
     useTuner.js        # microphone, input gain, YIN pitch detection, smoothing
