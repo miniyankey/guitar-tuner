@@ -1,7 +1,8 @@
 <script setup>
+// npm i @fontsource-variable/inter-tight
 import '@fontsource-variable/inter-tight'
-import { computed, reactive, ref } from 'vue'
-import { useTuner } from '@/composables/useTuner.js'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { useTuner } from '@/composables/useTuner'
 import NumberField from './NumberField.vue'
 import {
   guitar,
@@ -19,33 +20,76 @@ import {
   setStringFrequency,
   resetString,
   resetOverrides,
-} from '@/stores/useGuitar.js'
+} from '@/stores/useGuitar'
 
-/* ------------------------------ détection -------------------------------- */
+/* ========================================================================== */
+/*  Micro et détection                                                        */
+/* ========================================================================== */
 
-const DEFAULT_DETECTION = { sensitivity: 3, smoothing: 5, tolerance: 5 }
+const DEFAULT_DETECTION = { sensitivity: 7, smoothing: 5, tolerance: 5, autoGain: false }
 const detection = reactive({ ...DEFAULT_DETECTION })
-const RMS_BY_SENSITIVITY = [0.03, 0.018, 0.01, 0.005, 0.0025] // niveaux 1 à 5
+
+/**
+ * Le seuil de silence est fixe APRÈS le gain. La sensibilité (1 à 10) règle le gain d'entrée :
+ * niveau 1 = seuil brut 0,02, niveau 7 (défaut) ≈ 0,0009 (×11), niveau 10 ≈ 0,0002 (×50).
+ * Plus la sensibilité est haute, plus la détection tolère un signal bruité.
+ */
+const GATE = 0.01
+const audio = computed(() => {
+  const s = detection.sensitivity
+  const rawGate = 0.02 * 0.6 ** (s - 1)
+  return { gain: GATE / rawGate, yin: 0.12 + ((s - 1) * 0.13) / 9 }
+})
 
 const {
   isListening,
   error: micError,
   level,
+  sinceDetection,
   reading,
   status,
   mode,
   targetIndex,
+  start,
   toggle,
   selectString,
 } = useTuner({
-  minRms: () => RMS_BY_SENSITIVITY[detection.sensitivity - 1],
+  inputGain: () => audio.value.gain,
+  minRms: GATE,
+  yinThreshold: () => audio.value.yin,
+  minClarity: 0, // le seuil YIN filtre déjà les sons pas assez nets
   smoothing: () => detection.smoothing,
   inTuneCents: () => detection.tolerance,
+  autoGainControl: () => detection.autoGain,
 })
 
-const setMode = (m) => (mode.value = m)
+// Signal trop faible : en écoute, aucune note, et sous le seuil depuis 3 s
+const quietFor = ref(0)
+let lastLoud = 0
+watch([level, sinceDetection], () => {
+  const now = performance.now()
+  if (!lastLoud || level.value >= GATE) lastLoud = now
+  quietFor.value = now - lastLoud
+})
+watch(isListening, () => {
+  lastLoud = 0
+  quietFor.value = 0
+})
+const lowSignal = computed(() => isListening.value && !reading.value && quietFor.value > 3000)
+const boost = () => {
+  detection.sensitivity = Math.min(10, detection.sensitivity + 1)
+  lastLoud = 0
+}
 
-/* ------------------------------ formats ---------------------------------- */
+/** RMS -> % sur une échelle log : le repère (GATE) tombe à ~43 %. */
+const toPct = (rms) =>
+  Math.min(100, Math.max(0, ((Math.log10(Math.max(rms, 1e-5)) + 3.5) / 3.5) * 100))
+const levelPct = computed(() => (isListening.value ? toPct(level.value) : 0))
+const gatePct = `${toPct(GATE)}%`
+
+/* ========================================================================== */
+/*  Formats                                                                   */
+/* ========================================================================== */
 
 const nf = (n, d = 2) =>
   n.toLocaleString('fr-FR', {
@@ -86,7 +130,6 @@ function fmtTones(t) {
   }
   return `${t < 0 ? '−' : '+'}${body}`
 }
-const toneUnit = (t) => (Math.abs(t) > 1 ? 'tons' : 'ton')
 
 /** Accepte -1/4, −0,25, +½, 1¼ ... (en tons) */
 function parseTones(str) {
@@ -97,13 +140,13 @@ function parseTones(str) {
     .replace(/\s+/g, '')
     .replace(/tons?$/i, '')
   const m = /^([+-]?)(?:(\d+)\/(\d+)|(\d*\.?\d*)([⅛¼⅜½⅝¾⅞])?)$/.exec(s)
-  if (!s || !m) throw new Error('Écrivez un nombre de tons, par exemple −1/4 ou −0,25.')
+  if (!s || !m || (!m[2] && !m[4] && !m[5]))
+    throw new Error('Écrivez un nombre de tons, par exemple −1/4 ou −0,25.')
   let n
   if (m[2]) {
     if (Number(m[3]) === 0) throw new Error('Division par zéro.')
     n = Number(m[2]) / Number(m[3])
   } else {
-    if (!m[4] && !m[5]) throw new Error('Écrivez un nombre de tons, par exemple −1/4 ou −0,25.')
     n = (m[4] ? Number(m[4]) : 0) + (m[5] ? UNICODE_FRACTIONS[m[5]] : 0)
   }
   n = m[1] === '-' ? -n : n
@@ -111,50 +154,44 @@ function parseTones(str) {
   return n
 }
 
-/* ------------------------------ libellés --------------------------------- */
+/* ========================================================================== */
+/*  Navigation                                                                */
+/* ========================================================================== */
 
-const INSTRUMENT_FR = {
-  'guitar-6': 'Guitare 6 cordes',
-  'guitar-7': 'Guitare 7 cordes',
-  'guitar-8': 'Guitare 8 cordes',
-  'bass-4': 'Basse 4 cordes',
-  'bass-5': 'Basse 5 cordes',
-}
-const PRESET_FR = {
-  standard: 'Standard',
-  dropD: 'Drop D',
-  dadgad: 'DADGAD',
-  halfStepDown: 'Demi-ton plus bas',
-  fullStepDown: 'Ton plus bas',
-  openG: 'Open G',
-  openD: 'Open D',
-  openE: 'Open E',
-}
-
-/* ------------------------------ navigation ------------------------------- */
-
-const tab = ref('tuner') // "tuner" | "settings"
-const page = ref(null) // sous-menu ouvert dans Réglages
-const formError = ref('')
-
+const TABS = { tuner: 'Accorder', tuning: 'Accordage', settings: 'Réglages' }
 const PAGES = {
-  tuning: { title: 'Accordage', parent: null },
-  shift: { title: 'Ton global', parent: null },
-  advanced: { title: 'Avancé', parent: null },
-  strings: { title: 'Cordes', parent: 'advanced' },
-  pitch: { title: 'Fréquence de référence', parent: 'advanced' },
-  custom: { title: 'Accordage personnalisé', parent: 'advanced' },
-  detection: { title: 'Détection', parent: 'advanced' },
+  strings: { title: 'Cordes une par une', tab: 'tuning' },
+  pitch: { title: 'Diapason', tab: 'tuning' },
+  custom: { title: 'Accordage personnalisé', tab: 'tuning' },
+  detection: { title: 'Détection avancée', tab: 'settings' },
 }
 
-const customDraft = ref('')
+const tab = ref('tuner')
+const pages = reactive({ tuning: null, settings: null }) // sous-page ouverte, par onglet
+const page = computed(() => (tab.value === 'tuner' ? null : pages[tab.value]))
+const title = computed(() => (page.value ? PAGES[page.value].title : TABS[tab.value]))
 
+const formError = ref('')
+const customDraft = ref('')
+const screenEl = ref(null)
+
+function goTab(t) {
+  formError.value = ''
+  if (tab.value === t) pages[t] = null // toucher l'onglet actif revient à sa racine
+  tab.value = t
+}
 function open(key) {
   formError.value = ''
-  page.value = key
+  const t = PAGES[key].tab
+  tab.value = t
+  pages[t] = key
   if (key === 'custom') customDraft.value = tuningLabel.value
 }
-const back = () => open(PAGES[page.value].parent)
+function back() {
+  formError.value = ''
+  pages[tab.value] = null
+}
+watch([tab, page], () => nextTick(() => screenEl.value && (screenEl.value.scrollTop = 0)))
 
 function attempt(fn) {
   try {
@@ -166,42 +203,97 @@ function attempt(fn) {
 }
 const onInvalid = (msg) => (formError.value = msg)
 
-/* ------------------------------ données dérivées ------------------------- */
+/* ========================================================================== */
+/*  Accordage                                                                 */
+/* ========================================================================== */
+
+const INSTRUMENT_SHORT = {
+  'guitar-6': 'Guitare 6',
+  'guitar-7': 'Guitare 7',
+  'guitar-8': 'Guitare 8',
+  'bass-4': 'Basse 4',
+  'bass-5': 'Basse 5',
+}
+const PRESET_FR = {
+  standard: 'Standard',
+  dropD: 'Drop D',
+  dadgad: 'DADGAD',
+  openG: 'Open G',
+  openD: 'Open D',
+  openE: 'Open E',
+}
+// « Demi-ton / ton plus bas » doublonnent le ton global : on ne les propose pas ici.
+const HIDDEN_PRESETS = new Set(['halfStepDown', 'fullStepDown'])
+
+const SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 }
+/** Accordage « Drop » : la corde la plus grave descend d'un ton. */
+function dropOf(tuning) {
+  const notes = tuning.match(/[A-G][#b]?/g) ?? []
+  if (!notes.length) return null
+  const n = notes[0]
+  const v = SEMI[n[0]] + (n[1] === '#' ? 1 : n[1] === 'b' ? -1 : 0) - 2
+  const name = NOTE_NAMES[((v % 12) + 12) % 12]
+  return { id: 'drop', label: `Drop ${name}`, tuning: name + notes.slice(1).join('') }
+}
 
 const tuningLabel = computed(() => guitar.strings.map((s) => s.label).join(''))
-const hasCustom = computed(() => guitar.strings.some((s) => s.customNote || s.customFrequency))
+const instrumentId = computed(() => `${guitar.guitarType}-${guitar.numberStrings}`)
 const customCount = computed(
   () => guitar.strings.filter((s) => s.customNote || s.customFrequency).length,
 )
-const instrumentId = computed(() => `${guitar.guitarType}-${guitar.numberStrings}`)
 
 const presetList = computed(() => {
   if (guitar.guitarType === 'guitar' && guitar.numberStrings === 6) {
-    return TUNING_PRESETS.map((p) => ({
+    return TUNING_PRESETS.filter((p) => !HIDDEN_PRESETS.has(p.id)).map((p) => ({
       id: p.id,
       label: PRESET_FR[p.id] ?? p.label,
       tuning: p.tuning,
     }))
   }
-  const t = setDefaultTuning(guitar.numberStrings, guitar.guitarType)
-  return t ? [{ id: 'standard', label: 'Standard', tuning: t }] : []
+  const std = setDefaultTuning(guitar.numberStrings, guitar.guitarType)
+  if (!std) return []
+  return [{ id: 'standard', label: 'Standard', tuning: std }, dropOf(std)].filter(Boolean)
 })
-const activePreset = computed(() => presetList.value.find((p) => p.tuning === tuningLabel.value))
+const activePreset = computed(() =>
+  customCount.value ? null : presetList.value.find((p) => p.tuning === tuningLabel.value),
+)
 
 const shiftTones = computed(() => guitar.shiftCents / 200)
-const SHIFT_CHIPS = [-1, -0.5, -0.25, 0, 0.25, 0.5, 1]
-const shiftText = computed(() =>
-  Math.abs(shiftTones.value) < 0.005
-    ? '0'
-    : `${fmtTones(shiftTones.value)} ${toneUnit(shiftTones.value)}`,
+const hasShift = computed(() => Math.abs(shiftTones.value) >= 0.005)
+const shiftText = computed(
+  () => `${fmtTones(shiftTones.value)} ${Math.abs(shiftTones.value) > 1 ? 'tons' : 'ton'}`,
 )
+const SHIFT_CHIPS = [-1, -0.5, -0.25, 0, 0.25, 0.5, 1]
 const stepShift = (dir) =>
   attempt(() => setGlobalShift(Math.round((shiftTones.value + dir * 0.125) * 1000) / 1000))
 
 const A4_CHIPS = [432, 440, 442]
 const OCTAVES = [0, 1, 2, 3, 4, 5, 6, 7]
 
-/* ------------------------------ écran Accorder --------------------------- */
+const onInstrument = (id) => {
+  const inst = INSTRUMENTS.find((i) => i.id === id)
+  attempt(() => setInstrument(inst.guitarType, inst.numberStrings))
+}
+const onNoteName = (s, e) => attempt(() => setStringNote(s.index, `${e.target.value}${s.octave}`))
+const onOctave = (s, e) => attempt(() => setStringNote(s.index, `${s.note}${e.target.value}`))
+function applyCustom() {
+  attempt(() => setTuningModel(customDraft.value.trim()))
+  if (!formError.value) back()
+}
+function resetTuning() {
+  const inst = INSTRUMENTS.find((i) => i.id === instrumentId.value) ?? INSTRUMENTS[0]
+  attempt(() => setGuitar({ guitarType: inst.guitarType, numberStrings: inst.numberStrings }))
+}
+const resetDetection = () => Object.assign(detection, DEFAULT_DETECTION)
+
+const chromatic = computed({
+  get: () => mode.value === 'chromatic',
+  set: (on) => (mode.value = on ? 'chromatic' : 'auto'),
+})
+
+/* ========================================================================== */
+/*  Écran Accorder                                                            */
+/* ========================================================================== */
 
 const activeIndex = computed(() => reading.value?.string?.index ?? -1)
 const isOk = computed(() => !!reading.value?.inTune)
@@ -221,8 +313,8 @@ const hint = computed(
     ({
       idle: 'Appuyez sur Démarrer',
       waiting: targetString.value ? `Jouez ${targetString.value.name}` : 'Jouez une corde',
-      flat: 'Trop bas · serrez la corde',
-      sharp: 'Trop haut · desserrez la corde',
+      flat: 'Trop bas, serrez la corde',
+      sharp: 'Trop haut, desserrez la corde',
       'in-tune': 'Accordé',
     })[status.value],
 )
@@ -235,49 +327,33 @@ const centsText = computed(() => {
 
 const markLeft = computed(() => `${((reading.value?.needle ?? 0) + 1) * 50}%`)
 const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
-const levelPct = computed(() =>
-  isListening.value ? Math.min(100, Math.sqrt(level.value) * 140) : 0,
-)
-
-/* ------------------------------ réglages : actions ----------------------- */
-
-const onInstrument = (id) => {
-  const inst = INSTRUMENTS.find((i) => i.id === id)
-  attempt(() => setInstrument(inst.guitarType, inst.numberStrings))
-}
-const onNoteName = (s, e) => attempt(() => setStringNote(s.index, `${e.target.value}${s.octave}`))
-const onOctave = (s, e) => attempt(() => setStringNote(s.index, `${s.note}${e.target.value}`))
-const applyCustom = () => attempt(() => setTuningModel(customDraft.value.trim()))
-
-function resetEverything() {
-  attempt(() => {
-    setGuitar()
-    Object.assign(detection, DEFAULT_DETECTION)
-    mode.value = 'auto'
-  })
-}
-
-const chromatic = computed({
-  get: () => mode.value === 'chromatic',
-  set: (on) => (mode.value = on ? 'chromatic' : 'auto'),
-})
 </script>
 
 <template>
   <div class="app">
-    <header v-if="tab === 'settings'" class="top">
+    <header v-if="tab !== 'tuner'" class="top">
       <button v-if="page" type="button" class="icon-btn" aria-label="Retour" @click="back">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
       </button>
-      <h1>{{ page ? PAGES[page].title : 'Réglages' }}</h1>
+      <h1>{{ title }}</h1>
     </header>
 
-    <main class="screen">
-      <!-- ============================ ACCORDER ============================ -->
+    <main ref="screenEl" class="screen">
+      <p v-if="formError && tab !== 'tuner'" class="notice" role="alert">{{ formError }}</p>
+
+      <!-- ============================== ACCORDER ============================== -->
       <section v-if="tab === 'tuner'" class="tune" aria-label="Accordeur">
+        <button type="button" class="summary" @click="goTab('tuning')">
+          <span class="summary__main">
+            {{ activePreset?.label ?? 'Personnalisé' }} <b>{{ tuningLabel }}</b>
+          </span>
+          <span v-if="hasShift" class="badge">{{ shiftText }}</span>
+          <span v-if="mode === 'chromatic'" class="badge">Chromatique</span>
+          <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+        </button>
+
         <div class="stage" :class="{ ok: isOk }" aria-live="polite">
           <div class="stage__note">{{ bigNote }}</div>
-
           <div class="stage__freq">
             <template v-if="reading">
               <span>{{ nf(reading.frequency, 1) }} Hz</span>
@@ -289,7 +365,7 @@ const chromatic = computed({
           <div
             class="bar"
             role="meter"
-            aria-label="Écart par rapport à la note visée, en cents"
+            aria-label="Écart avec la note visée, en cents"
             aria-valuemin="-50"
             aria-valuemax="50"
             :aria-valuenow="reading ? Math.round(reading.cents) : 0"
@@ -312,14 +388,19 @@ const chromatic = computed({
           <p class="stage__hint">{{ hint }}</p>
         </div>
 
-        <div class="pills" role="radiogroup" aria-label="Corde à accorder">
+        <div
+          v-if="mode !== 'chromatic'"
+          class="pills"
+          role="radiogroup"
+          aria-label="Corde à accorder"
+        >
           <button
             type="button"
             role="radio"
             :aria-checked="mode === 'auto'"
             class="pill"
             :class="{ on: mode === 'auto' }"
-            @click="setMode('auto')"
+            @click="mode = 'auto'"
           >
             Auto
           </button>
@@ -340,8 +421,23 @@ const chromatic = computed({
           </button>
         </div>
 
+        <div v-if="lowSignal" class="notice notice--row" role="status">
+          <span>Signal trop faible. Rapprochez le micro.</span>
+          <button
+            v-if="detection.sensitivity < 10"
+            type="button"
+            class="chip chip--small"
+            @click="boost"
+          >
+            Sensibilité +
+          </button>
+        </div>
+
         <div class="listen">
-          <div class="level" aria-hidden="true"><i :style="{ width: levelPct + '%' }" /></div>
+          <div class="meter" aria-hidden="true">
+            <i class="meter__fill" :style="{ width: levelPct + '%' }" />
+            <i class="meter__gate" :style="{ left: gatePct }" />
+          </div>
           <button type="button" class="cta" :class="{ on: isListening }" @click="toggle">
             {{ isListening ? 'Arrêter' : 'Démarrer' }}
           </button>
@@ -349,174 +445,169 @@ const chromatic = computed({
         </div>
       </section>
 
-      <!-- ============================ RÉGLAGES ============================ -->
-      <section v-else class="settings">
-        <p v-if="formError" class="notice" role="alert">{{ formError }}</p>
-
-        <!-- Menu principal -->
-        <div v-if="!page" class="list">
-          <button type="button" class="row" @click="open('tuning')">
-            <span class="row__label">Accordage</span>
-            <span class="row__value"
-              >{{ activePreset?.label ?? 'Personnalisé' }} · {{ tuningLabel }}</span
-            >
-            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
-          </button>
-          <button type="button" class="row" @click="open('shift')">
-            <span class="row__label">Ton global</span>
-            <span class="row__value">{{ shiftText }}</span>
-            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
-          </button>
-          <button type="button" class="row" @click="open('advanced')">
-            <span class="row__label">Avancé</span>
-            <span class="row__value" />
-            <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
-          </button>
-        </div>
-
-        <!-- Accordage -->
-        <div v-else-if="page === 'tuning'" class="stack">
-          <h2>Instrument</h2>
-          <div class="list">
-            <button
-              v-for="i in INSTRUMENTS"
-              :key="i.id"
-              type="button"
-              class="row"
-              role="radio"
-              :aria-checked="instrumentId === i.id"
-              @click="onInstrument(i.id)"
-            >
-              <span class="row__label">{{ INSTRUMENT_FR[i.id] }}</span>
-              <svg
-                v-if="instrumentId === i.id"
-                class="check"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
+      <!-- ============================== ACCORDAGE ============================= -->
+      <template v-else-if="tab === 'tuning'">
+        <!-- Racine -->
+        <div v-if="!page" class="stack">
+          <button type="button" class="strip" @click="open('strings')">
+            <span class="strip__grid">
+              <span
+                v-for="s in guitar.strings"
+                :key="s.index"
+                class="strip__s"
+                :class="{ custom: s.customNote || s.customFrequency }"
               >
-                <path d="M5 12.5l4.5 4.5L19 7.5" />
+                <b>{{ s.name }}</b>
+                <small>{{ nf(s.frequency, 1) }}</small>
+              </span>
+            </span>
+            <span class="strip__edit">
+              Modifier les cordes
+              <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M9 5l7 7-7 7" />
               </svg>
-            </button>
-          </div>
+            </span>
+          </button>
 
-          <h2>Accordage</h2>
-          <div class="list">
-            <button
-              v-for="p in presetList"
-              :key="p.id"
-              type="button"
-              class="row"
-              role="radio"
-              :aria-checked="activePreset?.id === p.id"
-              @click="attempt(() => setTuningModel(p.tuning))"
-            >
-              <span class="row__label">{{ p.label }}</span>
-              <span class="row__value">{{ p.tuning }}</span>
-              <svg
-                v-if="activePreset?.id === p.id"
-                class="check"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
+          <section class="group">
+            <h2>Instrument</h2>
+            <div class="chips" role="radiogroup" aria-label="Instrument">
+              <button
+                v-for="i in INSTRUMENTS"
+                :key="i.id"
+                type="button"
+                role="radio"
+                class="chip"
+                :class="{ on: instrumentId === i.id }"
+                :aria-checked="instrumentId === i.id"
+                @click="onInstrument(i.id)"
               >
-                <path d="M5 12.5l4.5 4.5L19 7.5" />
-              </svg>
-            </button>
-          </div>
-        </div>
+                {{ INSTRUMENT_SHORT[i.id] }}
+              </button>
+            </div>
+          </section>
 
-        <!-- Ton global -->
-        <div v-else-if="page === 'shift'" class="stack">
-          <div class="big">
-            <b>{{ shiftText }}</b>
-            <span>La4 = {{ nf(guitar.referencePitch, 1) }} Hz</span>
-          </div>
+          <section class="group">
+            <h2>Accordage</h2>
+            <div class="list" role="radiogroup" aria-label="Accordage">
+              <button
+                v-for="p in presetList"
+                :key="p.id"
+                type="button"
+                class="row"
+                role="radio"
+                :aria-checked="activePreset?.id === p.id"
+                @click="attempt(() => setTuningModel(p.tuning))"
+              >
+                <span class="row__label">{{ p.label }}</span>
+                <span class="row__value">{{ p.tuning }}</span>
+                <span class="row__end">
+                  <svg
+                    v-if="activePreset?.id === p.id"
+                    class="check"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
+                </span>
+              </button>
+              <button
+                type="button"
+                class="row"
+                :aria-checked="!activePreset"
+                role="radio"
+                @click="open('custom')"
+              >
+                <span class="row__label">Personnalisé</span>
+                <span class="row__value">{{ activePreset ? '' : tuningLabel }}</span>
+                <span class="row__end">
+                  <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9 5l7 7-7 7" />
+                  </svg>
+                </span>
+              </button>
+            </div>
+          </section>
 
-          <div class="chips" role="radiogroup" aria-label="Ton global">
-            <button
-              v-for="t in SHIFT_CHIPS"
-              :key="t"
-              type="button"
-              role="radio"
-              class="chip"
-              :class="{ on: Math.abs(shiftTones - t) < 0.001 }"
-              :aria-checked="Math.abs(shiftTones - t) < 0.001"
-              @click="attempt(() => setGlobalShift(t))"
-            >
-              {{ fmtTones(t) }}
-            </button>
-          </div>
+          <section class="group">
+            <h2>Ton global</h2>
+            <div class="chips chips--row" role="radiogroup" aria-label="Ton global">
+              <button
+                v-for="t in SHIFT_CHIPS"
+                :key="t"
+                type="button"
+                role="radio"
+                class="chip"
+                :class="{ on: Math.abs(shiftTones - t) < 0.001 }"
+                :aria-checked="Math.abs(shiftTones - t) < 0.001"
+                @click="attempt(() => setGlobalShift(t))"
+              >
+                {{ fmtTones(t) }}
+              </button>
+            </div>
+            <div class="stepper">
+              <button
+                type="button"
+                class="chip"
+                aria-label="Baisser d'un huitième de ton"
+                @click="stepShift(-1)"
+              >
+                −⅛
+              </button>
+              <NumberField
+                :model-value="shiftTones"
+                :format="fmtTones"
+                :parse="parseTones"
+                inputmode="text"
+                unit="ton"
+                label="Ton global, en tons"
+                @update:model-value="(v) => attempt(() => setGlobalShift(v))"
+                @invalid="onInvalid"
+              />
+              <button
+                type="button"
+                class="chip"
+                aria-label="Monter d'un huitième de ton"
+                @click="stepShift(1)"
+              >
+                +⅛
+              </button>
+            </div>
+          </section>
 
-          <div class="stepper">
-            <button
-              type="button"
-              class="chip"
-              aria-label="Baisser d'un huitième de ton"
-              @click="stepShift(-1)"
-            >
-              −⅛
-            </button>
-            <NumberField
-              :model-value="shiftTones"
-              :format="fmtTones"
-              :parse="parseTones"
-              inputmode="text"
-              unit="ton"
-              label="Ton global, en tons"
-              placeholder="−1/8"
-              @update:model-value="(v) => attempt(() => setGlobalShift(v))"
-              @invalid="onInvalid"
-            />
-            <button
-              type="button"
-              class="chip"
-              aria-label="Monter d'un huitième de ton"
-              @click="stepShift(1)"
-            >
-              +⅛
-            </button>
-          </div>
-        </div>
+          <section class="group">
+            <h2>Avancé</h2>
+            <div class="list">
+              <button type="button" class="row" @click="open('strings')">
+                <span class="row__label">Cordes une par une</span>
+                <span class="row__value">
+                  {{ customCount ? `${customCount} modifiée${customCount > 1 ? 's' : ''}` : '' }}
+                </span>
+                <span class="row__end">
+                  <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9 5l7 7-7 7" />
+                  </svg>
+                </span>
+              </button>
+              <button type="button" class="row" @click="open('pitch')">
+                <span class="row__label">Diapason</span>
+                <span class="row__value">La4 = {{ nf(guitar.referencePitch, 1) }} Hz</span>
+                <span class="row__end">
+                  <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M9 5l7 7-7 7" />
+                  </svg>
+                </span>
+              </button>
+            </div>
+          </section>
 
-        <!-- Avancé -->
-        <div v-else-if="page === 'advanced'" class="stack">
-          <div class="list">
-            <button type="button" class="row" @click="open('strings')">
-              <span class="row__label">Cordes</span>
-              <span class="row__value">{{
-                customCount ? `${customCount} modifiée${customCount > 1 ? 's' : ''}` : ''
-              }}</span>
-              <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-            <button type="button" class="row" @click="open('pitch')">
-              <span class="row__label">Fréquence de référence</span>
-              <span class="row__value">La4 {{ nf(guitar.referencePitch, 1) }} Hz</span>
-              <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-            <button type="button" class="row" @click="open('custom')">
-              <span class="row__label">Accordage personnalisé</span>
-              <span class="row__value" />
-              <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-            <button type="button" class="row" @click="open('detection')">
-              <span class="row__label">Détection</span>
-              <span class="row__value" />
-              <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-          <button type="button" class="btn btn--ghost" @click="resetEverything">
-            Tout réinitialiser
+          <button type="button" class="btn btn--ghost" @click="resetTuning">
+            Réinitialiser l'accordage
           </button>
         </div>
 
-        <!-- Cordes -->
+        <!-- Cordes une par une -->
         <div v-else-if="page === 'strings'" class="stack">
           <ul class="slist">
             <li
@@ -566,8 +657,9 @@ const chromatic = computed({
               </button>
             </li>
           </ul>
+          <p class="help">Changer la fréquence de la corde de base décale toutes les autres.</p>
           <button
-            v-if="hasCustom"
+            v-if="customCount"
             type="button"
             class="btn btn--ghost"
             @click="attempt(resetOverrides)"
@@ -576,20 +668,8 @@ const chromatic = computed({
           </button>
         </div>
 
-        <!-- Fréquence de référence -->
+        <!-- Diapason -->
         <div v-else-if="page === 'pitch'" class="stack">
-          <div class="field">
-            <span>Corde de base ({{ guitar.strings[0]?.name }})</span>
-            <NumberField
-              :model-value="guitar.firstStringFrequency"
-              :format="fmtHz"
-              :parse="parseHz"
-              unit="Hz"
-              label="Fréquence de la corde de base"
-              @update:model-value="(v) => attempt(() => setFirstStringFrequency(v))"
-              @invalid="onInvalid"
-            />
-          </div>
           <div class="field">
             <span>La4</span>
             <NumberField
@@ -614,6 +694,19 @@ const chromatic = computed({
               {{ hz }} Hz
             </button>
           </div>
+          <div class="field">
+            <span>Corde de base ({{ guitar.strings[0]?.name }})</span>
+            <NumberField
+              :model-value="guitar.firstStringFrequency"
+              :format="fmtHz"
+              :parse="parseHz"
+              unit="Hz"
+              label="Fréquence de la corde de base"
+              @update:model-value="(v) => attempt(() => setFirstStringFrequency(v))"
+              @invalid="onInvalid"
+            />
+          </div>
+          <p class="help">Équivaut à un ton global de {{ shiftText }}.</p>
         </div>
 
         <!-- Accordage personnalisé -->
@@ -634,15 +727,55 @@ const chromatic = computed({
           </div>
           <button type="button" class="btn" @click="applyCustom">Appliquer</button>
         </div>
+      </template>
 
-        <!-- Détection -->
+      <!-- ============================== RÉGLAGES ============================== -->
+      <template v-else>
+        <div v-if="!page" class="stack">
+          <section class="group">
+            <h2>Micro</h2>
+            <div class="mic">
+              <label class="slider">
+                <span
+                  >Sensibilité <b>{{ detection.sensitivity }}/10</b></span
+                >
+                <input
+                  v-model.number="detection.sensitivity"
+                  type="range"
+                  min="1"
+                  max="10"
+                  step="1"
+                />
+              </label>
+              <div class="meter meter--big" aria-hidden="true">
+                <i class="meter__fill" :style="{ width: levelPct + '%' }" />
+                <i class="meter__gate" :style="{ left: gatePct }" />
+              </div>
+              <p class="help">Jouez une corde : la barre doit dépasser le repère.</p>
+              <button v-if="!isListening" type="button" class="btn btn--ghost" @click="start">
+                Tester le micro
+              </button>
+            </div>
+          </section>
+
+          <div class="list">
+            <label class="row row--switch">
+              <span class="row__label">Accordeur chromatique</span>
+              <input v-model="chromatic" type="checkbox" role="switch" />
+            </label>
+            <button type="button" class="row" @click="open('detection')">
+              <span class="row__label">Détection avancée</span>
+              <span class="row__value" />
+              <span class="row__end">
+                <svg class="chev" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M9 5l7 7-7 7" />
+                </svg>
+              </span>
+            </button>
+          </div>
+        </div>
+
         <div v-else-if="page === 'detection'" class="stack">
-          <label class="slider">
-            <span
-              >Sensibilité <b>{{ detection.sensitivity }}/5</b></span
-            >
-            <input v-model.number="detection.sensitivity" type="range" min="1" max="5" step="1" />
-          </label>
           <label class="slider">
             <span
               >Lissage <b>{{ detection.smoothing }}</b></span
@@ -655,37 +788,50 @@ const chromatic = computed({
             >
             <input v-model.number="detection.tolerance" type="range" min="1" max="10" step="1" />
           </label>
-          <label class="switch">
-            <span>Toutes les notes, sans cordes</span>
-            <input v-model="chromatic" type="checkbox" role="switch" />
-          </label>
+          <div class="list">
+            <label class="row row--switch">
+              <span class="row__label">Gain automatique du téléphone</span>
+              <input v-model="detection.autoGain" type="checkbox" role="switch" />
+            </label>
+          </div>
+          <button type="button" class="btn btn--ghost" @click="resetDetection">
+            Réinitialiser la détection
+          </button>
         </div>
-      </section>
+      </template>
     </main>
 
     <nav class="nav" aria-label="Navigation">
       <button
         type="button"
         :aria-current="tab === 'tuner' ? 'page' : undefined"
-        @click="tab = 'tuner'"
+        @click="goTab('tuner')"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h3l2-6 4 12 3-9 2 3h4" /></svg>
+        <span>{{ TABS.tuner }}</span>
+        <i v-if="isListening" class="dot" />
+      </button>
+      <button
+        type="button"
+        :aria-current="tab === 'tuning' ? 'page' : undefined"
+        @click="goTab('tuning')"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M3 12h3l2-6 4 12 3-9 2 3h4" />
+          <path d="M9 3v7a3 3 0 0 0 6 0V3M12 13v8" />
         </svg>
-        <span>Accorder</span>
-        <i v-if="isListening" class="dot" aria-label="Écoute en cours" />
+        <span>{{ TABS.tuning }}</span>
       </button>
       <button
         type="button"
         :aria-current="tab === 'settings' ? 'page' : undefined"
-        @click="tab = 'settings'"
+        @click="goTab('settings')"
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 7h10M18 7h2M4 17h2M10 17h10" />
           <circle cx="16" cy="7" r="2" />
           <circle cx="8" cy="17" r="2" />
         </svg>
-        <span>Réglages</span>
+        <span>{{ TABS.settings }}</span>
       </button>
     </nav>
   </div>
@@ -728,7 +874,7 @@ const chromatic = computed({
 }
 @media (min-width: 600px) {
   .app {
-    height: min(860px, calc(100dvh - 48px));
+    height: min(880px, calc(100dvh - 48px));
     margin: 24px auto;
     border: 1.5px solid var(--blue-100);
     border-radius: 28px;
@@ -742,24 +888,29 @@ button {
 }
 button:focus-visible,
 select:focus-visible,
-input:focus-visible {
+input:focus-visible,
+label:focus-within {
   outline: 3px solid var(--blue-400);
   outline-offset: 2px;
 }
+.row--switch:focus-within {
+  outline-offset: -3px;
+}
 
-/* ---------- haut / contenu / navigation ---------- */
+/* ---------- structure ---------- */
 .top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-height: 56px;
-  padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+  padding: max(8px, env(safe-area-inset-top)) 12px 4px;
 }
 .top h1 {
   margin: 0;
-  font-size: 1.35rem;
+  padding-left: 4px;
+  font-size: 1.4rem;
   font-weight: 700;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 .icon-btn {
   display: grid;
@@ -785,21 +936,34 @@ input:focus-visible {
   width: 24px;
   height: 24px;
 }
+.chev,
+.check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+}
+.chev {
+  color: var(--blue-400);
+}
+.check {
+  color: var(--blue);
+  stroke-width: 2.5;
+}
 
 .screen {
   flex: 1;
   min-height: 0;
-  padding: 12px 16px 16px;
+  padding: 8px 16px 20px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-.app:has(.tune) .screen {
-  padding-top: max(16px, env(safe-area-inset-top));
+.screen:has(.tune) {
+  padding-top: max(12px, env(safe-area-inset-top));
 }
 
 .nav {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   border-top: 1.5px solid var(--blue-100);
   padding-bottom: env(safe-area-inset-bottom);
   background: #fff;
@@ -821,6 +985,7 @@ input:focus-visible {
 }
 .nav button[aria-current='page'] {
   color: var(--blue);
+  font-weight: 700;
 }
 .nav svg {
   width: 26px;
@@ -846,8 +1011,44 @@ input:focus-visible {
 .tune {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
   min-height: 100%;
+}
+.summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 8px 0 14px;
+  border: 1.5px solid var(--blue-100);
+  border-radius: 14px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+.summary__main {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--blue-500);
+}
+.summary__main b {
+  color: var(--blue-900);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.badge {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--blue-100);
+  color: var(--blue-700);
+  font-size: 0.85rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
 }
 
 .stage {
@@ -861,8 +1062,8 @@ input:focus-visible {
   flex: 1;
   flex-direction: column;
   justify-content: center;
-  min-height: 330px;
-  padding: 24px 20px 20px;
+  min-height: 310px;
+  padding: 22px 20px 18px;
   border-radius: 24px;
   background: var(--blue-50);
   color: var(--fg);
@@ -896,11 +1097,10 @@ input:focus-visible {
   font-variant-numeric: tabular-nums;
   opacity: 0.8;
 }
-
 .bar {
   position: relative;
   height: 48px;
-  margin: 26px 4px 4px;
+  margin: 24px 4px 4px;
 }
 .bar__track {
   position: absolute;
@@ -954,14 +1154,14 @@ input:focus-visible {
   gap: 8px;
   font-size: 0.9rem;
 }
+.bar__legend span {
+  opacity: 0.75;
+}
 .bar__legend span:first-child {
   text-align: left;
 }
 .bar__legend span:last-child {
   text-align: right;
-}
-.bar__legend span {
-  opacity: 0.75;
 }
 .bar__legend b {
   min-width: 6ch;
@@ -970,7 +1170,7 @@ input:focus-visible {
 }
 .stage__hint {
   min-height: 1.6em;
-  margin: 18px 0 0;
+  margin: 16px 0 0;
   font-size: 1.3rem;
   font-weight: 650;
   letter-spacing: -0.01em;
@@ -1008,18 +1208,34 @@ input:focus-visible {
   display: grid;
   gap: 10px;
 }
-.level {
-  height: 4px;
-  border-radius: 2px;
+
+/* niveau du micro, avec repère de détection */
+.meter {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
   background: var(--blue-100);
-  overflow: hidden;
 }
-.level i {
-  display: block;
-  height: 100%;
+.meter--big {
+  height: 14px;
+  border-radius: 7px;
+}
+.meter__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
   background: var(--blue);
   transition: width 0.08s linear;
 }
+.meter__gate {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--blue-900);
+}
+
 .cta,
 .btn {
   min-height: 56px;
@@ -1042,27 +1258,86 @@ input:focus-visible {
 }
 
 .notice {
-  margin: 0;
+  margin: 0 0 12px;
   padding: 12px 14px;
   border: 1.5px solid var(--blue);
   border-radius: 12px;
   background: var(--blue-50);
   color: var(--blue-900);
 }
-.settings > .notice {
-  margin-bottom: 12px;
+.tune .notice {
+  margin: 0;
+}
+.notice--row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.notice--row span {
+  flex: 1;
 }
 
-/* ---------- réglages ---------- */
+/* ---------- onglets Accordage et Réglages ---------- */
 .stack {
   display: grid;
-  gap: 16px;
+  gap: 20px;
 }
-.stack h2 {
-  margin: 8px 0 -8px;
-  font-size: 0.95rem;
-  font-weight: 650;
+.group {
+  display: grid;
+  gap: 10px;
+}
+.group h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+}
+
+.strip {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 14px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--blue-50);
+  text-align: left;
+  cursor: pointer;
+}
+.strip__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(50px, 1fr));
+  gap: 6px;
+}
+.strip__s {
+  display: grid;
+  justify-items: center;
+  padding: 8px 2px;
+  border-radius: 12px;
+  background: #fff;
+}
+.strip__s b {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.strip__s small {
   color: var(--blue-500);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+.strip__s.custom {
+  box-shadow: 0 0 0 1.5px var(--blue) inset;
+}
+.strip__edit {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  color: var(--blue);
+  font-weight: 650;
+}
+.strip__edit .chev {
+  color: var(--blue);
 }
 
 .list {
@@ -1073,8 +1348,8 @@ input:focus-visible {
   align-items: center;
   gap: 12px;
   width: 100%;
-  min-height: 60px;
-  padding: 0 4px;
+  min-height: 56px;
+  padding: 0 2px;
   border: 0;
   border-bottom: 1.5px solid var(--blue-100);
   background: transparent;
@@ -1089,41 +1364,21 @@ input:focus-visible {
   color: var(--blue-500);
   font-variant-numeric: tabular-nums;
   text-align: right;
+  letter-spacing: 0.02em;
 }
-.chev,
-.check {
-  flex: none;
+.row__end {
+  display: grid;
+  place-items: center;
   width: 22px;
-  height: 22px;
-  color: var(--blue);
-}
-.chev {
-  color: var(--blue-400);
-}
-.check {
-  stroke-width: 2.5;
 }
 .row[aria-checked='true'] .row__label {
   color: var(--blue);
 }
-
-.big {
-  display: grid;
-  gap: 2px;
-  padding: 22px 16px;
-  border-radius: 20px;
-  background: var(--blue-50);
-  text-align: center;
-}
-.big b {
-  font-size: 3.2rem;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: -0.03em;
-}
-.big span {
-  color: var(--blue-500);
-  font-variant-numeric: tabular-nums;
+.row--switch input {
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  accent-color: var(--blue);
 }
 
 .chips {
@@ -1133,7 +1388,7 @@ input:focus-visible {
 }
 .chip {
   min-width: 56px;
-  min-height: 48px;
+  min-height: 46px;
   padding: 0 14px;
   border: 1.5px solid var(--blue-200);
   border-radius: 14px;
@@ -1147,6 +1402,20 @@ input:focus-visible {
   background: var(--blue);
   color: #fff;
 }
+.chips--row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+.chips--row .chip {
+  min-width: 0;
+  padding: 0;
+}
+.chip--small {
+  flex: none;
+  min-height: 40px;
+  padding: 0 12px;
+}
 .stepper {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1159,9 +1428,7 @@ input:focus-visible {
   gap: 6px;
 }
 .field > span {
-  color: var(--blue-500);
-  font-size: 0.95rem;
-  font-weight: 550;
+  font-weight: 600;
 }
 .text,
 select {
@@ -1183,14 +1450,24 @@ select:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px var(--blue-100);
 }
-
-.slider,
-.switch {
-  display: grid;
-  gap: 10px;
+.help {
+  margin: 0;
+  color: var(--blue-500);
+  font-size: 0.92rem;
 }
-.slider span,
-.switch span {
+
+.mic {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 20px;
+  background: var(--blue-50);
+}
+.slider {
+  display: grid;
+  gap: 8px;
+}
+.slider span {
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -1203,17 +1480,11 @@ select:focus {
 .slider input {
   width: 100%;
   height: 32px;
+  margin: 0;
   accent-color: var(--blue);
 }
-.switch {
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  min-height: 52px;
-}
-.switch input {
-  width: 26px;
-  height: 26px;
-  accent-color: var(--blue);
+.slider:focus-within {
+  outline: none;
 }
 
 .slist {
@@ -1279,7 +1550,7 @@ select:focus {
 
 @media (prefers-reduced-motion: reduce) {
   .bar__mark,
-  .level i,
+  .meter__fill,
   .stage,
   .dot {
     transition: none;
