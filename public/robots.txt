@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://free-full-guitar-tuner.netlify.app/sitemap.xml
