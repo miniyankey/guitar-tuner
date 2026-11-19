@@ -88,7 +88,8 @@
     "toleranceValue": "±{n} Cent",
     "autoGain": "Automatische Verstärkung",
     "resetDetection": "Erkennung zurücksetzen",
-    "language": "Sprache"
+    "language": "Sprache",
+    "madeBy": "Erstellt von"
   },
   "units": {
     "tone": "Ton | Töne"

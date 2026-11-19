@@ -88,7 +88,8 @@
     "toleranceValue": "±{n} cents",
     "autoGain": "Automatic gain",
     "resetDetection": "Reset detection",
-    "language": "Language"
+    "language": "Language",
+    "madeBy": "Made by"
   },
   "units": {
     "tone": "tone | tones"

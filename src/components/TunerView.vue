@@ -827,6 +827,16 @@ const zoneWidth = computed(() => `${detection.tolerance * 2}%`)
               </span>
             </button>
           </div>
+
+          <p class="help credit">
+            {{ t('settings.madeBy') }}
+            <a
+              href="https://rochaty.ch/?utm_source=guitar-tuner&utm_medium=referral&utm_campaign=credit-footer"
+              target="_blank"
+              rel="noopener"
+              >Yannis Rochat</a
+            >
+          </p>
         </div>
 
         <div v-else-if="page === 'detection'" class="stack">
@@ -1534,6 +1544,21 @@ select:focus {
   margin: 0;
   color: var(--blue-500);
   font-size: 0.92rem;
+}
+
+.credit {
+  text-align: center;
+}
+
+.credit a {
+  color: var(--blue);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.credit a:hover,
+.credit a:focus-visible {
+  text-decoration: underline;
 }
 
 .mic {
