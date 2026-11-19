@@ -20,15 +20,25 @@ export function freqToNote(freq, a4 = 440) {
   }
 }
 
+/** Index of the smallest value of `d` in [from, to] (clamped to [1, max]), or -1. */
+const localMin = (d, from, to, max) => {
+  let best = -1
+  for (let i = Math.max(1, from); i <= Math.min(to, max); i++)
+    if (best === -1 || d[i] < d[best]) best = i
+  return best
+}
+
 /**
  * YIN pitch detection.
  * Returns { freq, clarity } where clarity is 0..1 (1 = perfectly periodic).
  * freq = -1 when no pitch is found.
+ * `hint` (Hz, optional): expected frequency, used to resolve octave errors.
+ * `hintOctavesOnly`: the hint may only move the result down by whole octaves.
  */
 export function detectPitchYin(
   buf,
   sampleRate,
-  { minFreq = 60, maxFreq = 1200, threshold = 0.15 } = {},
+  { minFreq = 60, maxFreq = 1200, threshold = 0.15, hint, hintOctavesOnly = false } = {},
 ) {
   const W = buf.length >> 1 // integration window
   const tauMax = Math.min(W - 1, Math.floor(sampleRate / minFreq))
@@ -65,7 +75,30 @@ export function detectPitchYin(
   }
   if (tauEst === -1) return { freq: -1, clarity: 0 }
 
-  // 4. parabolic interpolation (sub-sample accuracy)
+  // 4. octave check. The scan above starts at short periods, so when the fundamental is weak
+  //    (unplugged electric, phone mic) a strong 2nd/3rd harmonic can pass the threshold first and
+  //    the note reads an octave (or a fifth) too high. Every multiple of the true period is a dip
+  //    too: look at 2τ..4τ and keep a longer period when it is clearly deeper, or when it matches
+  //    the frequency we expect (`hint`: the selected string, or the note already being tracked).
+  //    With `hintOctavesOnly` the hint may only pick 2τ or 4τ: a selected string must not turn
+  //    another string into its 3rd harmonic (B3 is 3 × E2, E4 is 3 × A2).
+  const candidates = [tauEst]
+  for (let k = 2; k <= 4; k++) {
+    if (hint > 0 && hintOctavesOnly && k === 3) continue
+    const c = localMin(d, Math.round(k * tauEst * 0.97), Math.round(k * tauEst * 1.03), tauMax)
+    if (c !== -1 && d[c] < Math.max(2 * threshold, 0.35)) candidates.push(c)
+  }
+  if (hint > 0) {
+    // move only onto a period within half an octave of the hint, else trust the detection
+    const dist = (tau) => Math.abs(Math.log2(sampleRate / tau / hint))
+    const closest = candidates.reduce((best, c) => (dist(c) < dist(best) ? c : best))
+    if (dist(closest) < 0.5) tauEst = closest
+  } else {
+    // only doubt a mediocre dip: comparing two near-zero dips of a clean tone means nothing
+    for (const c of candidates) if (d[tauEst] > 0.1 && d[c] < d[tauEst] * 0.5) tauEst = c
+  }
+
+  // 5. parabolic interpolation (sub-sample accuracy)
   const x0 = d[tauEst - 1] ?? d[tauEst]
   const x2 = d[tauEst + 1] ?? d[tauEst]
   const denom = 2 * (x0 - 2 * d[tauEst] + x2)
@@ -149,6 +182,7 @@ export function useTuner(options = {}) {
   let rafId = 0
   let lastRun = 0
   let lastSignal = 0
+  let lastRms = 0
   let history = []
 
   /* ------------------------------ derived ------------------------------- */
@@ -209,6 +243,7 @@ export function useTuner(options = {}) {
       history = []
       lastRun = 0
       lastSignal = 0
+      lastRms = 0
       startedAt = performance.now()
       isListening.value = true
       rafId = requestAnimationFrame(tick)
@@ -272,11 +307,24 @@ export function useTuner(options = {}) {
     level.value = rms
     sinceDetection.value = now - Math.max(lastSignal, startedAt)
 
+    // a new pluck (sudden jump in level) starts a new note: forget the one being tracked
+    const onset = rms > lastRms * 1.8
+    lastRms = rms
+    if (onset) history = []
+
     if (rms < toValue(minRms)) return signalLost(now)
+
+    // expected frequency, to keep the same octave while the note decays (see detectPitchYin):
+    // the note tracked since the last pluck, else the selected string (octave fixes only)
+    const tracked = history.length ? median(history) : undefined
+    const hint =
+      tracked ?? (mode.value === 'string' ? list.value[targetIndex.value]?.frequency : undefined)
 
     const { freq, clarity } = detectPitchYin(buf, ctx.sampleRate, {
       ...detectionRange(),
       threshold: toValue(yinThreshold),
+      hint,
+      hintOctavesOnly: tracked === undefined,
     })
     if (freq <= 0 || clarity < toValue(minClarity)) return signalLost(now)
 
